@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('../db');
+const { prepare } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -11,7 +11,7 @@ if (STRIPE_SECRET_KEY) {
 }
 
 router.get('/balance', requireAuth, (req, res) => {
-  const user = db.prepare('SELECT novux FROM users WHERE id = ?').get(req.session.userId);
+  const user = prepare('SELECT novux FROM users WHERE id = ?').get(req.session.userId);
   res.json({ novux: user.novux });
 });
 
@@ -58,7 +58,7 @@ router.post('/promocode', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Code required' });
   }
 
-  const promo = db.prepare(`
+  const promo = prepare(`
     SELECT * FROM promo_codes WHERE code = ? AND uses_remaining > 0
     AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
   `).get(code.toUpperCase());
@@ -67,13 +67,13 @@ router.post('/promocode', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Invalid or expired code' });
   }
 
-  db.prepare('UPDATE users SET novux = novux + ? WHERE id = ?')
+  prepare('UPDATE users SET novux = novux + ? WHERE id = ?')
     .run(promo.novux_amount, req.session.userId);
 
-  db.prepare('UPDATE promo_codes SET uses_remaining = uses_remaining - 1 WHERE id = ?')
+  prepare('UPDATE promo_codes SET uses_remaining = uses_remaining - 1 WHERE id = ?')
     .run(promo.id);
 
-  db.prepare(`
+  prepare(`
     INSERT INTO transactions (from_user_id, to_user_id, amount, type, description)
     VALUES (NULL, ?, ?, 'promocode', 'Promo code: ?')
   `).run(req.session.userId, promo.novux_amount, code);
@@ -82,7 +82,7 @@ router.post('/promocode', requireAuth, (req, res) => {
 });
 
 router.get('/transactions', requireAuth, (req, res) => {
-  const transactions = db.prepare(`
+  const transactions = prepare(`
     SELECT t.*, 
            CASE 
              WHEN t.to_user_id = ? THEN 'received'
@@ -105,23 +105,23 @@ router.post('/transfer', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Invalid username or amount' });
   }
 
-  const recipient = db.prepare('SELECT id, novux FROM users WHERE username = ?').get(toUsername);
+  const recipient = prepare('SELECT id, novux FROM users WHERE username = ?').get(toUsername);
   if (!recipient) {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  const sender = db.prepare('SELECT novux FROM users WHERE id = ?').get(req.session.userId);
+  const sender = prepare('SELECT novux FROM users WHERE id = ?').get(req.session.userId);
 
   if (sender.novux < amountInt) {
     return res.status(400).json({ error: 'Not enough Novux' });
   }
 
-  db.prepare('UPDATE users SET novux = novux - ? WHERE id = ?')
+  prepare('UPDATE users SET novux = novux - ? WHERE id = ?')
     .run(amountInt, req.session.userId);
-  db.prepare('UPDATE users SET novux = novux + ? WHERE id = ?')
+  prepare('UPDATE users SET novux = novux + ? WHERE id = ?')
     .run(amountInt, recipient.id);
 
-  db.prepare(`
+  prepare(`
     INSERT INTO transactions (from_user_id, to_user_id, amount, type, description)
     VALUES (?, ?, ?, 'transfer', 'Transfer to ?')
   `).run(req.session.userId, recipient.id, amountInt, toUsername);

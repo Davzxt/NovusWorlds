@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Games - Novus Worlds</title>
+  <link rel="stylesheet" href="/css/global.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="header-content">
+        <a href="/" class="logo">Novus <span>Worlds</span></a>
+        <nav class="nav">
+          <a href="/">Home</a>
+          <a href="/games.html">Games</a>
+          <a href="/catalog.html">Catalog</a>
+        </nav>
+        <div class="header-right" id="header-right">
+          <div class="logged-out">
+            <a href="/login.html" class="btn btn-secondary">Log In</a>
+            <a href="/register.html" class="btn btn-primary">Sign Up</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="container">
+      <div class="filters">
+        <div class="filter-group">
+          <label style="color:#fff;">Sort:</label>
+          <select id="sort-filter" class="filter-select">
+            <option value="recent">Most Recent</option>
+            <option value="popular">Most Popular</option>
+            <option value="players">Most Players</option>
+          </select>
+        </div>
+        <a href="/studio.html" class="btn btn-primary logged-in">Create Game</a>
+      </div>
+
+      <div class="search-box">
+        <input type="text" id="search-input" class="search-input" placeholder="Search games...">
+        <button id="search-btn" class="btn btn-secondary">Search</button>
+      </div>
+
+      <div class="game-grid" id="games-list">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <p class="footer-copyright">© 2008 Novus Worlds</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/auth.js"></script>
+  <script>
+    let currentPage = 1;
+
+    async function loadGames(page = 1) {
+      const sort = document.getElementById('sort-filter').value;
+      const search = document.getElementById('search-input').value;
+      
+      try {
+        const response = await fetch(`/api/games?sort=${sort}&search=${encodeURIComponent(search)}&page=${page}`);
+        const data = await response.json();
+        const container = document.getElementById('games-list');
+        
+        if (data.games.length === 0) {
+          container.innerHTML = '<p style="color:#fff;grid-column:1/-1;text-align:center;">No games found</p>';
+          return;
+        }
+        
+        container.innerHTML = data.games.map(game => `
+          <div class="card-item" onclick="window.location.href='/game.html?id=${game.id}'">
+            <div class="card-thumbnail">
+              ${game.thumbnail_url ? `<img src="${game.thumbnail_url}">` : '<span style="color:#999;">No Image</span>'}
+            </div>
+            <div class="card-info">
+              <div class="card-title">${game.title}</div>
+              <div class="card-meta">by ${game.creator_username}</div>
+              <div class="card-meta">${game.visit_count} visits • ${game.max_players} players</div>
+            </div>
+          </div>
+        `).join('');
+        
+        renderPagination(data.total, data.page, data.totalPages);
+      } catch (error) {
+        document.getElementById('games-list').innerHTML = '<p style="color:#fff;">Error loading games</p>';
+      }
+    }
+
+    function renderPagination(total, page, totalPages) {
+      const container = document.getElementById('pagination');
+      if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+      }
+      
+      let html = '';
+      for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="${i === page ? 'active' : ''}" onclick="loadGames(${i})">${i}</button>`;
+      }
+      container.innerHTML = html;
+    }
+
+    document.getElementById('sort-filter').addEventListener('change', () => loadGames(1));
+    document.getElementById('search-btn').addEventListener('click', () => loadGames(1));
+    document.getElementById('search-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') loadGames(1);
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      checkSession().then(auth => {
+        const loggedOut = document.querySelector('.logged-out');
+        const loggedIn = document.querySelector('.logged-in');
+        if (auth) {
+          const response = await fetch('/api/auth/session');
+          const data = await response.json();
+          if (data.authenticated) {
+            document.getElementById('header-right').innerHTML = `
+              <span class="novux-balance">${data.user.novux} Ƀ</span>
+              <a href="/studio.html" class="btn btn-primary">Create Game</a>
+              <a href="/profile.html?user=${data.user.username}" class="btn btn-secondary">${data.user.username}</a>
+            `;
+          }
+        }
+      });
+      loadGames();
+    });
+  </script>
+</body>
+</html>

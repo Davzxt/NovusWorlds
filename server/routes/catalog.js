@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('../db');
+const { prepare } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -35,7 +35,7 @@ router.get('/', (req, res) => {
   if (sort === 'price_desc') orderBy = 'ci.price DESC';
   if (sort === 'popular') orderBy = 'ci.sales_count DESC';
 
-  const items = db.prepare(`
+  const items = prepare(`
     SELECT ci.id, ci.name, ci.description, ci.type, ci.price, ci.thumbnail_url, ci.sales_count,
            u.username as creator_username
     FROM catalog_items ci
@@ -49,7 +49,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/featured', (req, res) => {
-  const items = db.prepare(`
+  const items = prepare(`
     SELECT ci.id, ci.name, ci.description, ci.type, ci.price, ci.thumbnail_url,
            u.username as creator_username
     FROM catalog_items ci
@@ -63,7 +63,7 @@ router.get('/featured', (req, res) => {
 });
 
 router.get('/:id', (req, res) => {
-  const item = db.prepare(`
+  const item = prepare(`
     SELECT ci.*, u.username as creator_username
     FROM catalog_items ci
     JOIN users u ON ci.creator_id = u.id
@@ -81,21 +81,21 @@ router.post('/buy', requireAuth, (req, res) => {
   const { itemId } = req.body;
   const userId = req.session.userId;
 
-  const item = db.prepare('SELECT * FROM catalog_items WHERE id = ? AND is_active = 1')
+  const item = prepare('SELECT * FROM catalog_items WHERE id = ? AND is_active = 1')
     .get(itemId);
 
   if (!item) {
     return res.status(404).json({ error: 'Item not found' });
   }
 
-  const owned = db.prepare('SELECT * FROM user_inventory WHERE user_id = ? AND item_id = ?')
+  const owned = prepare('SELECT * FROM user_inventory WHERE user_id = ? AND item_id = ?')
     .get(userId, itemId);
 
   if (owned) {
     return res.status(400).json({ error: 'You already own this item' });
   }
 
-  const user = db.prepare('SELECT novux FROM users WHERE id = ?').get(userId);
+  const user = prepare('SELECT novux FROM users WHERE id = ?').get(userId);
 
   if (user.novux < item.price) {
     return res.status(400).json({ error: 'Not enough Novux' });
@@ -105,29 +105,29 @@ router.post('/buy', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Item out of stock' });
   }
 
-  db.prepare('UPDATE users SET novux = novux - ? WHERE id = ?').run(item.price, userId);
+  prepare('UPDATE users SET novux = novux - ? WHERE id = ?').run(item.price, userId);
   
-  db.prepare('INSERT INTO user_inventory (user_id, item_id) VALUES (?, ?)').run(userId, itemId);
+  prepare('INSERT INTO user_inventory (user_id, item_id) VALUES (?, ?)').run(userId, itemId);
   
-  db.prepare('UPDATE catalog_items SET sales_count = sales_count + 1 WHERE id = ?').run(itemId);
+  prepare('UPDATE catalog_items SET sales_count = sales_count + 1 WHERE id = ?').run(itemId);
   
   if (item.is_limited === 1) {
-    db.prepare('UPDATE catalog_items SET limited_quantity = limited_quantity - 1 WHERE id = ?')
+    prepare('UPDATE catalog_items SET limited_quantity = limited_quantity - 1 WHERE id = ?')
       .run(itemId);
   }
 
-  const creator = db.prepare('SELECT * FROM users WHERE id = ?').get(item.creator_id);
+  const creator = prepare('SELECT * FROM users WHERE id = ?').get(item.creator_id);
   const creatorShare = Math.floor(item.price * 0.8);
   
   if (creator && creator.id !== userId) {
-    db.prepare('UPDATE users SET novux = novux + ? WHERE id = ?').run(creatorShare, item.creator_id);
-    db.prepare(`
+    prepare('UPDATE users SET novux = novux + ? WHERE id = ?').run(creatorShare, item.creator_id);
+    prepare(`
       INSERT INTO transactions (from_user_id, to_user_id, amount, type, description)
       VALUES (?, ?, ?, 'sale', 'Item sale: ?')
     `).run(userId, item.creator_id, creatorShare, item.name);
   }
 
-  db.prepare(`
+  prepare(`
     INSERT INTO transactions (from_user_id, to_user_id, amount, type, description)
     VALUES (?, NULL, ?, 'purchase', 'Purchased: ?')
   `).run(userId, -item.price, item.name);
@@ -136,7 +136,7 @@ router.post('/buy', requireAuth, (req, res) => {
 });
 
 router.get('/user/inventory', requireAuth, (req, res) => {
-  const items = db.prepare(`
+  const items = prepare(`
     SELECT ci.*, ui.purchased_at
     FROM user_inventory ui
     JOIN catalog_items ci ON ui.item_id = ci.id
@@ -148,7 +148,7 @@ router.get('/user/inventory', requireAuth, (req, res) => {
 });
 
 router.get('/user/owned/:itemId', requireAuth, (req, res) => {
-  const owned = db.prepare('SELECT * FROM user_inventory WHERE user_id = ? AND item_id = ?')
+  const owned = prepare('SELECT * FROM user_inventory WHERE user_id = ? AND item_id = ?')
     .get(req.session.userId, req.params.itemId);
 
   res.json({ owned: !!owned });

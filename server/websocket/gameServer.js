@@ -1,7 +1,8 @@
 const gameServers = new Map();
 const MAX_PLAYERS = 20;
+const { prepare } = require('../db');
 
-function setupGameWebSocket(wss, db) {
+function setupGameWebSocket(wss) {
   wss.on('connection', (ws, req) => {
     const urlParts = req.url.split('/');
     const gameId = urlParts[urlParts.length - 1];
@@ -45,7 +46,7 @@ function setupGameWebSocket(wss, db) {
     ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data);
-        handleMessage(msg, player, serverInstance, db);
+        handleMessage(msg, player, serverInstance);
       } catch (e) {
         console.error('Invalid message:', e);
       }
@@ -121,7 +122,7 @@ function setupGameWebSocket(wss, db) {
   wss.on('close', () => clearInterval(interval));
 }
 
-function handleMessage(msg, player, serverInstance, db) {
+function handleMessage(msg, player, serverInstance) {
   switch (msg.type) {
     case 'join':
       player.userId = msg.userId;

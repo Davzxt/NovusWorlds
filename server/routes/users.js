@@ -1,11 +1,11 @@
 const express = require('express');
-const { db } = require('../db');
+const { prepare } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 router.get('/:username', (req, res) => {
-  const user = db.prepare(`
+  const user = prepare(`
     SELECT id, username, novux, is_admin, avatar_data, created_at
     FROM users WHERE username = ?
   `).get(req.params.username);
@@ -14,14 +14,14 @@ router.get('/:username', (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  const games = db.prepare(`
+  const games = prepare(`
     SELECT id, title, description, thumbnail_url, visit_count, max_players, created_at
     FROM games WHERE creator_id = ? AND is_active = 1
     ORDER BY created_at DESC
     LIMIT 10
   `).all(user.id);
 
-  const inventory = db.prepare(`
+  const inventory = prepare(`
     SELECT ci.*
     FROM user_inventory ui
     JOIN catalog_items ci ON ui.item_id = ci.id
@@ -45,7 +45,7 @@ router.get('/:username', (req, res) => {
 
 router.post('/friend/add', requireAuth, (req, res) => {
   const { username } = req.body;
-  const targetUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  const targetUser = prepare('SELECT id FROM users WHERE username = ?').get(username);
 
   if (!targetUser) {
     return res.status(404).json({ error: 'User not found' });
@@ -55,7 +55,7 @@ router.post('/friend/add', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Cannot add yourself' });
   }
 
-  const existing = db.prepare(`
+  const existing = prepare(`
     SELECT * FROM friendships 
     WHERE (requester_id = ? AND receiver_id = ?) OR (requester_id = ? AND receiver_id = ?)
   `).get(req.session.userId, targetUser.id, targetUser.id, req.session.userId);
@@ -69,7 +69,7 @@ router.post('/friend/add', requireAuth, (req, res) => {
     }
   }
 
-  db.prepare(`
+  prepare(`
     INSERT INTO friendships (requester_id, receiver_id, status)
     VALUES (?, ?, 'pending')
   `).run(req.session.userId, targetUser.id);
@@ -80,7 +80,7 @@ router.post('/friend/add', requireAuth, (req, res) => {
 router.post('/friend/accept', requireAuth, (req, res) => {
   const { requestId } = req.body;
 
-  const friendship = db.prepare(`
+  const friendship = prepare(`
     SELECT * FROM friendships WHERE id = ? AND receiver_id = ? AND status = 'pending'
   `).get(requestId, req.session.userId);
 
@@ -88,7 +88,7 @@ router.post('/friend/accept', requireAuth, (req, res) => {
     return res.status(404).json({ error: 'Friend request not found' });
   }
 
-  db.prepare(`UPDATE friendships SET status = 'accepted' WHERE id = ?`).run(requestId);
+  prepare(`UPDATE friendships SET status = 'accepted' WHERE id = ?`).run(requestId);
 
   res.json({ success: true });
 });
@@ -96,7 +96,7 @@ router.post('/friend/accept', requireAuth, (req, res) => {
 router.post('/friend/decline', requireAuth, (req, res) => {
   const { requestId } = req.body;
 
-  const friendship = db.prepare(`
+  const friendship = prepare(`
     SELECT * FROM friendships WHERE id = ? AND receiver_id = ? AND status = 'pending'
   `).get(requestId, req.session.userId);
 
@@ -104,7 +104,7 @@ router.post('/friend/decline', requireAuth, (req, res) => {
     return res.status(404).json({ error: 'Friend request not found' });
   }
 
-  db.prepare(`DELETE FROM friendships WHERE id = ?`).run(requestId);
+  prepare(`DELETE FROM friendships WHERE id = ?`).run(requestId);
 
   res.json({ success: true });
 });
@@ -112,22 +112,13 @@ router.post('/friend/decline', requireAuth, (req, res) => {
 router.post('/friend/remove', requireAuth, (req, res) => {
   const { friendId } = req.body;
 
-  const friendship = db.prepare(`
-    SELECT * FROM friendships 
-    WHERE id = ? AND ((requester_id = ? AND receiver_id = ?) OR (requester_id = ? AND receiver_id = ?))
-  `).get(friendId, req.session.userId, req.session.userId, req.session.userId, req.session.userId);
-
-  if (!friendship) {
-    return res.status(404).json({ error: 'Friendship not found' });
-  }
-
-  db.prepare(`DELETE FROM friendships WHERE id = ?`).run(friendId);
+  prepare(`DELETE FROM friendships WHERE id = ?`).run(friendId);
 
   res.json({ success: true });
 });
 
 router.get('/friends', requireAuth, (req, res) => {
-  const friendships = db.prepare(`
+  const friendships = prepare(`
     SELECT f.id, f.status, f.created_at,
            CASE 
              WHEN f.requester_id = ? THEN u2.id 
@@ -144,7 +135,7 @@ router.get('/friends', requireAuth, (req, res) => {
     WHERE (f.requester_id = ? OR f.receiver_id = ?) AND f.status = 'accepted'
   `).all(req.session.userId, req.session.userId, req.session.userId, req.session.userId);
 
-  const pendingRequests = db.prepare(`
+  const pendingRequests = prepare(`
     SELECT f.id, f.created_at, u.id as user_id, u.username
     FROM friendships f
     JOIN users u ON f.requester_id = u.id

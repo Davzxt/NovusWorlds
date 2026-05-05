@@ -3,7 +3,7 @@ const session = require('express-session');
 const path = require('path');
 const http = require('http');
 const { WebSocketServer } = require('ws');
-const { db, initializeDatabase } = require('./db');
+const { initializeDatabase, prepare } = require('./db');
 
 const authRoutes = require('./routes/auth');
 const gamesRoutes = require('./routes/games');
@@ -60,22 +60,27 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-const wss = new WebSocketServer({ server, path: '/ws/game' });
-const chatWss = new WebSocketServer({ server, path: '/ws/chat' });
+async function startServer() {
+  await initializeDatabase();
+  
+  const wss = new WebSocketServer({ server, path: '/ws/game' });
+  const chatWss = new WebSocketServer({ server, path: '/ws/chat' });
 
-setupGameWebSocket(wss, db);
-setupChatWebSocket(chatWss, db);
+  setupGameWebSocket(wss);
+  setupChatWebSocket(chatWss);
 
-server.listen(PORT, () => {
-  initializeDatabase();
-  console.log(`Novus Worlds server running on port ${PORT}`);
-  console.log(`WebSocket game server running on /ws/game`);
-  console.log(`WebSocket chat server running on /ws/chat`);
-  if (STRIPE_SECRET_KEY) {
-    console.log(`Stripe payment integration enabled`);
-  } else {
-    console.log(`WARNING: STRIPE_SECRET_KEY not set - donations disabled`);
-  }
-});
+  server.listen(PORT, () => {
+    console.log(`Novus Worlds server running on port ${PORT}`);
+    console.log(`WebSocket game server running on /ws/game`);
+    console.log(`WebSocket chat server running on /ws/chat`);
+    if (STRIPE_SECRET_KEY) {
+      console.log(`Stripe payment integration enabled`);
+    } else {
+      console.log(`WARNING: STRIPE_SECRET_KEY not set - donations disabled`);
+    }
+  });
+}
 
-module.exports = { app, server, db };
+startServer();
+
+module.exports = { app, server };

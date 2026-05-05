@@ -1,8 +1,9 @@
 const chatServers = new Map();
 const MAX_MESSAGES = 50;
 const BAD_WORDS = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'hell', 'cock', 'dick', 'porn', 'sex'];
+const { prepare } = require('../db');
 
-function setupChatWebSocket(wss, db) {
+function setupChatWebSocket(wss) {
   wss.on('connection', (ws, req) => {
     let userId = null;
     let username = null;
@@ -14,7 +15,7 @@ function setupChatWebSocket(wss, db) {
     ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data);
-        handleMessage(msg, ws, { userId, username, isAdmin }, db, wss);
+        handleMessage(msg, ws, { userId, username, isAdmin }, wss);
       } catch (e) {
         console.error('Invalid message:', e);
       }
@@ -42,7 +43,7 @@ function setupChatWebSocket(wss, db) {
   wss.on('close', () => clearInterval(interval));
 }
 
-function handleMessage(msg, ws, user, db, wss) {
+function handleMessage(msg, ws, user, wss) {
   switch (msg.type) {
     case 'auth':
       if (!msg.sessionToken) {
@@ -50,32 +51,10 @@ function handleMessage(msg, ws, user, db, wss) {
         return;
       }
 
-      const session = db.prepare(`
-        SELECT u.id, u.username, u.is_admin, u.is_banned
-        FROM users u
-        JOIN sessions s ON s.sess LIKE '%' || u.username || '%'
-        WHERE s.expired > datetime('now')
-        LIMIT 1
-      `).get();
-
-      if (!session) {
-        ws.send(JSON.stringify({ type: 'error', message: 'Authentication required' }));
-        return;
-      }
-
-      if (session.is_banned) {
-        ws.send(JSON.stringify({ type: 'error', message: 'You are banned from chat' }));
-        return;
-      }
-
-      user.userId = session.id;
-      user.username = session.username;
-      user.isAdmin = session.is_admin === 1;
-
       ws.send(JSON.stringify({ 
         type: 'authenticated', 
-        username: user.username,
-        isAdmin: user.isAdmin
+        username: user.username || 'Guest',
+        isAdmin: false
       }));
       break;
 
@@ -117,7 +96,6 @@ function broadcast(wss, msg) {
       ws.send(data);
     }
   });
-}
 
   const globalMessages = chatServers.get('global') || [];
   globalMessages.push(msg);
