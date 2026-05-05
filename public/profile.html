@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile - Novus Worlds</title>
+  <link rel="stylesheet" href="/css/global.css">
+  <style>
+    .profile-container { max-width: 900px; margin: 30px auto; }
+    .profile-header { display: flex; gap: 30px; background: #fff; padding: 20px; border-radius: 3px; margin-bottom: 20px; }
+    .profile-3d { width: 200px; height: 250px; background: linear-gradient(180deg, #87CEEB 0%, #e0e0e0 100%); border-radius: 3px; }
+    .profile-info { flex: 1; }
+    .profile-name { font-size: 28px; color: var(--accent); margin-bottom: 10px; }
+    .profile-name .badge { font-size: 12px; background: var(--accent); color: #000; padding: 2px 8px; border-radius: 10px; margin-left: 10px; vertical-align: middle; }
+    .profile-stats { display: flex; gap: 30px; color: #666; margin-bottom: 15px; }
+    .profile-actions { display: flex; gap: 10px; }
+    .tabs-container { background: #fff; border-radius: 3px; padding: 20px; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="header-content">
+        <a href="/" class="logo">Novus <span>Worlds</span></a>
+        <nav class="nav">
+          <a href="/">Home</a>
+          <a href="/games.html">Games</a>
+          <a href="/catalog.html">Catalog</a>
+        </nav>
+        <div class="header-right" id="header-right">
+          <a href="/login.html" class="btn btn-secondary">Log In</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="container">
+      <div class="profile-container">
+        <div class="profile-header">
+          <div class="profile-3d" id="avatar-preview"></div>
+          <div class="profile-info">
+            <h1 class="profile-name" id="profile-name">Username<span class="badge" id="profile-badge" style="display:none;">Official</span></h1>
+            <div class="profile-stats">
+              <span>Joined: <span id="join-date">-</span></span>
+              <span>Visits: <span id="visit-count">0</span></span>
+            </div>
+            <div class="profile-actions" id="profile-actions"></div>
+          </div>
+        </div>
+
+        <div class="tabs-container">
+          <div class="tabs">
+            <div class="tab active" data-tab="games">Games</div>
+            <div class="tab" data-tab="inventory">Inventory</div>
+          </div>
+          <div id="tab-content"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    const username = new URLSearchParams(window.location.search).get('user');
+    let currentUser = null;
+    let profileUser = null;
+
+    async function checkSession() {
+      const res = await fetch('/api/auth/session');
+      const data = await res.json();
+      currentUser = data.authenticated ? data.user : null;
+      return currentUser;
+    }
+
+    async function loadProfile() {
+      if (!username) {
+        window.location.href = '/';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/users/${username}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          window.location.href = '/';
+          return;
+        }
+
+        profileUser = data.user;
+        renderProfile(data);
+      } catch (error) {
+        window.location.href = '/';
+      }
+    }
+
+    function renderProfile(data) {
+      document.title = `${profileUser.username} - Novus Worlds`;
+      document.getElementById('profile-name').innerHTML = profileUser.username + 
+        (profileUser.isAdmin ? '<span class="badge">Official</span>' : '');
+
+      const joinDate = new Date(profileUser.createdAt).toLocaleDateString('en-US', { 
+        year: 'numeric', month: 'short', day: 'numeric' 
+      });
+      document.getElementById('join-date').textContent = joinDate;
+
+      const actions = document.getElementById('profile-actions');
+      
+      if (currentUser && currentUser.id === profileUser.id) {
+        actions.innerHTML = `
+          <a href="/avatar.html" class="btn btn-secondary">Edit Avatar</a>
+          <a href="/studio.html" class="btn btn-primary">My Studio</a>
+        `;
+      } else if (currentUser) {
+        actions.innerHTML = `
+          <button class="btn btn-secondary" id="friend-btn">Add Friend</button>
+          <button class="btn btn-primary" id="message-btn">Message</button>
+        `;
+      }
+
+      renderTab('games', data.games);
+      renderAvatarPreview(profileUser.avatarData);
+    }
+
+    function renderTab(tab, data) {
+      const container = document.getElementById('tab-content');
+      
+      document.querySelectorAll('.tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+      });
+
+      if (tab === 'games') {
+        if (!data || data.length === 0) {
+          container.innerHTML = '<p style="color:#666;">No games created yet.</p>';
+          return;
+        }
+        
+        container.innerHTML = `
+          <div class="game-grid">
+            ${data.map(game => `
+              <div class="card-item" onclick="window.location.href='/game.html?id=${game.id}'">
+                <div class="card-thumbnail">
+                  ${game.thumbnail_url ? `<img src="${game.thumbnail_url}">` : '<span style="color:#999;">No Image</span>'}
+                </div>
+                <div class="card-info">
+                  <div class="card-title">${game.title}</div>
+                  <div class="card-meta">${game.visit_count} visits</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else if (tab === 'inventory') {
+        if (!data || data.length === 0) {
+          container.innerHTML = '<p style="color:#666;">No items owned yet.</p>';
+          return;
+        }
+        
+        container.innerHTML = `
+          <div class="card-grid">
+            ${data.map(item => `
+              <div class="card-item" onclick="window.location.href='/item.html?id=${item.id}'">
+                <div class="card-thumbnail">
+                  ${item.thumbnail_url ? `<img src="${item.thumbnail_url}">` : '<span style="color:#999;">No Image</span>'}
+                </div>
+                <div class="card-info">
+                  <div class="card-title">${item.name}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+    }
+
+    function renderAvatarPreview(avatarData) {
+      const container = document.getElementById('avatar-preview');
+      if (!container) return;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87CEEB);
+
+      const camera = new THREE.PerspectiveCamera(50, 200/250, 0.1, 1000);
+      camera.position.set(0, 2, 5);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(200, 250);
+      container.appendChild(renderer.domElement);
+
+      const ambientLight = new THREE.AmbientLight(0x404040);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+      dirLight.position.set(2, 3, 2);
+      scene.add(dirLight);
+
+      const color = avatarData?.head || '#f5d0a8';
+      const group = new THREE.Group();
+
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshStandardMaterial({ color })
+      );
+      head.position.y = 2;
+      group.add(head);
+
+      const torso = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1.5, 0.5),
+        new THREE.MeshStandardMaterial({ color: avatarData?.torso || color })
+      );
+      torso.position.y = 0.75;
+      group.add(torso);
+
+      const limbGeo = new THREE.BoxGeometry(0.4, 1.5, 0.4);
+      const limbMat = new THREE.MeshStandardMaterial({ color: avatarData?.left_arm || color });
+
+      group.add(new THREE.Mesh(limbGeo, limbMat));
+      group.add(new THREE.Mesh(limbGeo, limbMat.clone()));
+
+      scene.add(group);
+
+      let angle = 0;
+      function animate() {
+        requestAnimationFrame(animate);
+        angle += 0.01;
+        group.rotation.y = angle * 0.5;
+        renderer.render(scene, camera);
+      }
+      animate();
+    }
+
+    async function init() {
+      await checkSession();
+      await loadProfile();
+
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          const tabName = tab.dataset.tab;
+          if (tabName === 'games') {
+            renderTab('games', profileUser?.games);
+          } else if (tabName === 'inventory') {
+            renderTab('inventory', profileUser?.inventory);
+          }
+        });
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

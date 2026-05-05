@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catalog Management - Novus Worlds Admin</title>
+  <link rel="stylesheet" href="/css/global.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <div class="admin-container">
+    <div class="admin-sidebar">
+      <h2>Admin Panel</h2>
+      <a href="/admin/">Dashboard</a>
+      <a href="/admin/users.html">Users</a>
+      <a href="/admin/games.html">Games</a>
+      <a href="/admin/catalog.html" class="active">Catalog</a>
+      <a href="/admin/economy.html">Economy</a>
+      <a href="/admin/reports.html">Reports</a>
+      <a href="/admin/settings.html">Settings</a>
+      <a href="/">Back to Site</a>
+    </div>
+
+    <div class="admin-main">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;">
+        <h1>Catalog Management</h1>
+        <button class="btn btn-primary" id="add-item-btn">+ Add Item</button>
+      </div>
+
+      <div class="filters">
+        <select id="type-filter" class="filter-select">
+          <option value="">All Types</option>
+          <option value="hat">Hats</option>
+          <option value="face">Faces</option>
+          <option value="shirt">Shirts</option>
+          <option value="pants">Pants</option>
+        </select>
+        <input type="text" id="search-input" class="search-input" placeholder="Search items...">
+        <button class="btn btn-secondary" id="search-btn">Search</button>
+      </div>
+
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Price</th>
+            <th>Creator</th>
+            <th>Sales</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="items-table"></tbody>
+      </table>
+
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="add-modal">
+    <div class="modal" style="max-width:900px;max-height:90vh;">
+      <div class="modal-header">
+        <h3>Add Catalog Item</h3>
+        <button class="modal-close" id="close-modal">&times;</button>
+      </div>
+      <div class="modal-body modal-split">
+        <div>
+          <div class="form-group">
+            <label class="form-label">Item Name *</label>
+            <input type="text" id="item-name" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="item-description" class="form-input" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Type *</label>
+            <select id="item-type" class="form-input">
+              <option value="hat">Hat</option>
+              <option value="face">Face</option>
+              <option value="shirt">Shirt</option>
+              <option value="pants">Pants</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Price (Novux) *</label>
+            <input type="number" id="item-price" class="form-input" value="0" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Upload Asset</label>
+            <input type="file" id="item-asset" accept=".png,.jpg,.gltf,.glb">
+            <small style="color:#666;">PNG max 512x512 for hat/face, 585x559 for shirt/pants</small>
+          </div>
+
+          <div id="hat-transform-section" style="display:none;">
+            <h4 style="margin:20px 0 10px;">Hat Transform</h4>
+            <div class="transform-controls">
+              <div><label>Position X</label><input type="range" id="hat-px" min="-5" max="5" step="0.1" value="0"><input type="number" id="hat-px-val" value="0" step="0.1"></div>
+              <div><label>Position Y</label><input type="range" id="hat-py" min="-5" max="5" step="0.1" value="1.5"><input type="number" id="hat-py-val" value="1.5" step="0.1"></div>
+              <div><label>Position Z</label><input type="range" id="hat-pz" min="-5" max="5" step="0.1" value="0"><input type="number" id="hat-pz-val" value="0" step="0.1"></div>
+              <div><label>Rotation X</label><input type="range" id="hat-rx" min="0" max="360" step="1" value="0"><input type="number" id="hat-rx-val" value="0"></div>
+              <div><label>Rotation Y</label><input type="range" id="hat-ry" min="0" max="360" step="1" value="0"><input type="number" id="hat-ry-val" value="0"></div>
+              <div><label>Rotation Z</label><input type="range" id="hat-rz" min="0" max="360" step="1" value="0"><input type="number" id="hat-rz-val" value="0"></div>
+              <div><label>Scale X</label><input type="range" id="hat-sx" min="0.1" max="5" step="0.1" value="1"><input type="number" id="hat-sx-val" value="1" step="0.1"></div>
+              <div><label>Scale Y</label><input type="range" id="hat-sy" min="0.1" max="5" step="0.1" value="1"><input type="number" id="hat-sy-val" value="1" step="0.1"></div>
+              <div><label>Scale Z</label><input type="range" id="hat-sz" min="0.1" max="5" step="0.1" value="1"><input type="number" id="hat-sz-val" value="1" step="0.1"></div>
+            </div>
+            <button class="btn btn-secondary btn-small" id="auto-fit-btn" style="margin-top:10px;">Auto-Fit to Head</button>
+          </div>
+        </div>
+
+        <div>
+          <h4 style="margin-bottom:10px;">Preview</h4>
+          <div class="preview-canvas" id="preview-canvas"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="save-item-btn">Save Item</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    let currentPage = 1;
+    let previewScene, previewCamera, previewRenderer, r6Model, hatModel;
+
+    async function loadItems(page = 1) {
+      const type = document.getElementById('type-filter').value;
+      const search = document.getElementById('search-input').value;
+      
+      const res = await fetch(`/api/admin/catalog?type=${type}&search=${encodeURIComponent(search)}&page=${page}`);
+      const data = await res.json();
+      
+      const tbody = document.getElementById('items-table');
+      if (data.items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No items found</td></tr>';
+        return;
+      }
+      
+      tbody.innerHTML = data.items.map(item => `
+        <tr>
+          <td>${item.id}</td>
+          <td>${item.name}</td>
+          <td>${item.type}</td>
+          <td>${item.price}</td>
+          <td>${item.creator_username}</td>
+          <td>${item.sales_count}</td>
+          <td class="actions">
+            <button class="btn btn-small btn-secondary" onclick="editItem(${item.id})">Edit</button>
+            <button class="btn btn-small btn-danger" onclick="deleteItem(${item.id})">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function editItem(id) {
+      window.location.href = `/admin/catalog.html?edit=${id}`;
+    }
+
+    async function deleteItem(id) {
+      if (!confirm('Delete this item?')) return;
+      
+      await fetch(`/api/admin/catalog/${id}/delete`, { method: 'POST' });
+      loadItems(currentPage);
+    }
+
+    function initPreview() {
+      const container = document.getElementById('preview-canvas');
+      
+      previewScene = new THREE.Scene();
+      previewScene.background = new THREE.Color(0x333333);
+
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(10, 10),
+        new THREE.MeshStandardMaterial({ color: 0x222222 })
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -1.5;
+      previewScene.add(ground);
+
+      previewCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+      previewCamera.position.set(0, 2, 5);
+
+      previewRenderer = new THREE.WebGLRenderer({ antialias: true });
+      previewRenderer.setSize(container.clientWidth, 400);
+      container.appendChild(previewRenderer.domElement);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+      previewScene.add(ambient);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+      dirLight.position.set(2, 3, 2);
+      previewScene.add(dirLight);
+
+      const loader = new GLTFLoader();
+      loader.load('/assets/r6/r6.gltf', (gltf) => {
+        r6Model = gltf.scene;
+        r6Model.scale.set(1, 1, 1);
+        previewScene.add(r6Model);
+      }, undefined, (err) => {
+        createDefaultR6();
+      });
+    }
+
+    function createDefaultR6() {
+      const group = new THREE.Group();
+      const color = 0xf5d0a8;
+      
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshStandardMaterial({ color })
+      );
+      head.position.y = 2;
+      group.add(head);
+
+      const torso = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1.5, 0.5),
+        new THREE.MeshStandardMaterial({ color })
+      );
+      torso.position.y = 0.75;
+      group.add(torso);
+
+      const limbGeo = new THREE.BoxGeometry(0.4, 1.5, 0.4);
+      
+      group.add(new THREE.Mesh(limbGeo, new THREE.MeshStandardMaterial({ color })));
+      group.add(new THREE.Mesh(limbGeo, new THREE.MeshStandardMaterial({ color })));
+      group.add(new THREE.Mesh(limbGeo, new THREE.MeshStandardMaterial({ color })));
+      group.add(new THREE.Mesh(limbGeo, new THREE.MeshStandardMaterial({ color })));
+
+      r6Model = group;
+      previewScene.add(r6Model);
+    }
+
+    function updateHatTransform() {
+      if (!hatModel || !r6Model) return;
+      
+      const px = parseFloat(document.getElementById('hat-px').value);
+      const py = parseFloat(document.getElementById('hat-py').value);
+      const pz = parseFloat(document.getElementById('hat-pz').value);
+      const rx = THREE.MathUtils.degToRad(parseFloat(document.getElementById('hat-rx').value));
+      const ry = THREE.MathUtils.degToRad(parseFloat(document.getElementById('hat-ry').value));
+      const rz = THREE.MathUtils.degToRad(parseFloat(document.getElementById('hat-rz').value));
+      const sx = parseFloat(document.getElementById('hat-sx').value);
+      const sy = parseFloat(document.getElementById('hat-sy').value);
+      const sz = parseFloat(document.getElementById('hat-sz').value);
+
+      hatModel.position.set(px, py, pz);
+      hatModel.rotation.set(rx, ry, rz);
+      hatModel.scale.set(sx, sy, sz);
+    }
+
+    function setupTransformControls() {
+      const controls = ['px', 'py', 'pz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'];
+      controls.forEach(id => {
+        const range = document.getElementById(`hat-${id}`);
+        const number = document.getElementById(`hat-${id}-val`);
+        
+        range.addEventListener('input', () => {
+          number.value = range.value;
+          updateHatTransform();
+        });
+        
+        number.addEventListener('input', () => {
+          range.value = number.value;
+          updateHatTransform();
+        });
+      });
+
+      document.getElementById('auto-fit-btn').addEventListener('click', () => {
+        document.getElementById('hat-py').value = 2.5;
+        document.getElementById('hat-py-val').value = 2.5;
+        document.getElementById('hat-sx').value = 1;
+        document.getElementById('hat-sy').value = 1;
+        document.getElementById('hat-sz').value = 1;
+        document.getElementById('hat-sx-val').value = 1;
+        document.getElementById('hat-sy-val').value = 1;
+        document.getElementById('hat-sz-val').value = 1;
+        updateHatTransform();
+      });
+    }
+
+    function animatePreview() {
+      requestAnimationFrame(animatePreview);
+      if (r6Model) {
+        r6Model.rotation.y += 0.005;
+      }
+      previewRenderer.render(previewScene, previewCamera);
+    }
+
+    document.getElementById('add-item-btn').addEventListener('click', () => {
+      document.getElementById('add-modal').classList.remove('hidden');
+      if (!previewRenderer) {
+        initPreview();
+        setupTransformControls();
+        animatePreview();
+      }
+    });
+
+    document.getElementById('close-modal').addEventListener('click', () => {
+      document.getElementById('add-modal').classList.add('hidden');
+    });
+
+    document.getElementById('cancel-btn').addEventListener('click', () => {
+      document.getElementById('add-modal').classList.add('hidden');
+    });
+
+    document.getElementById('item-type').addEventListener('change', (e) => {
+      document.getElementById('hat-transform-section').style.display = 
+        e.target.value === 'hat' ? 'block' : 'none';
+    });
+
+    document.getElementById('save-item-btn').addEventListener('click', async () => {
+      const name = document.getElementById('item-name').value;
+      const description = document.getElementById('item-description').value;
+      const type = document.getElementById('item-type').value;
+      const price = parseInt(document.getElementById('item-price').value);
+      const asset = document.getElementById('item-asset').files[0];
+
+      if (!name || price === undefined) {
+        alert('Name and price required');
+        return;
+      }
+
+      const hatTransform = type === 'hat' ? {
+        position: { x: parseFloat(document.getElementById('hat-px').value), y: parseFloat(document.getElementById('hat-py').value), z: parseFloat(document.getElementById('hat-pz').value) },
+        rotation: { x: parseFloat(document.getElementById('hat-rx').value), y: parseFloat(document.getElementById('hat-ry').value), z: parseFloat(document.getElementById('hat-rz').value) },
+        scale: { x: parseFloat(document.getElementById('hat-sx').value), y: parseFloat(document.getElementById('hat-sy').value), z: parseFloat(document.getElementById('hat-sz').value) }
+      } : null;
+
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('description', description);
+      formData.append('type', type);
+      formData.append('price', price);
+      formData.append('hat_transform', JSON.stringify(hatTransform));
+      if (asset) formData.append('asset', asset);
+
+      try {
+        const res = await fetch('/api/admin/catalog/add', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (res.ok) {
+          alert('Item saved!');
+          document.getElementById('add-modal').classList.add('hidden');
+          loadItems(currentPage);
+        } else {
+          const data = await res.json();
+          alert(data.error);
+        }
+      } catch (err) {
+        alert('Error saving item');
+      }
+    });
+
+    document.getElementById('type-filter').addEventListener('change', () => loadItems(1));
+    document.getElementById('search-btn').addEventListener('click', () => loadItems(1));
+    document.getElementById('search-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') loadItems(1);
+    });
+
+    loadItems();
+  </script>
+</body>
+</html>
