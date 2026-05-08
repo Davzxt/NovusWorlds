@@ -5,7 +5,7 @@ import { createR6Avatar } from './r6-viewer.js';
 const id = new URLSearchParams(location.search).get('id') || '1';
 const { game } = await api('/api/games/' + id);
 const user = await currentUser() || { id: Math.random().toString(36).slice(2), username: 'Guest', avatar_data: {} };
-const settings = { mouseSensitivity: 0.004, walkSpeed: 7.5, runSpeed: 12, jumpPower: 11, fov: 70, shiftToRun: true, graphics: 'high' };
+const settings = { mouseSensitivity: 0.004, walkSpeed: 7.5, jumpPower: 11, fov: 70, graphics: 'high' };
 const guestKey = getGuestKey();
 
 document.getElementById('gameTitle').textContent = game.title;
@@ -120,7 +120,7 @@ async function createCharacter(avatarData, isLocal = false) {
 function animateR6(group, name, t) {
   const root = group.children[0]?.children?.find?.(c => c.type === 'Group') || group.children[0];
   const parts = root?.children || [];
-  const speed = name === 'run' ? 12 : name === 'walk' ? 8 : name === 'climb' ? 10 : 2;
+  const speed = name === 'walk' ? 8 : name === 'climb' ? 10 : 2;
   const swing = Math.sin(t * speed);
   parts.forEach((m) => {
     const x = m.position?.x || 0, y = m.position?.y || 0;
@@ -129,8 +129,8 @@ function animateR6(group, name, t) {
     if (name === 'idle') { if (y > 1.8) m.rotation.y = Math.sin(t * 1.5) * 0.04; return; }
     if (name === 'jump') { if (Math.abs(x) > .55 && y > .8) m.rotation.x = 0.45; if (y < .8) m.rotation.x = -0.25; return; }
     if (name === 'climb') { if (Math.abs(x) > .55 || y < .8) m.rotation.x = -swing * 0.65; return; }
-    if (Math.abs(x) > .55 && y > .8) m.rotation.x = (x > 0 ? swing : -swing) * 0.42;
-    if (y < .8) m.rotation.x = (x > 0 ? -swing : swing) * 0.36;
+    if (Math.abs(x) > .55 && y > .8) m.rotation.x = (x > 0 ? -swing : swing) * 0.42;
+    if (y < .8) m.rotation.x = (x > 0 ? swing : -swing) * 0.36;
   });
 }
 
@@ -138,14 +138,13 @@ function moveAndCollide(dt) {
   const touch = getTouchMove();
   const input = touch.lengthSq() ? touch : new THREE.Vector3((keys.a ? 1 : 0) - (keys.d ? 1 : 0), 0, (keys.w ? 1 : 0) - (keys.s ? 1 : 0));
   const isMoving = input.lengthSq() > 0;
-  const run = keys.shift && settings.shiftToRun;
   if (isMoving) {
     input.normalize();
     const camForward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const camRight = new THREE.Vector3(camForward.z, 0, -camForward.x);
     const dir = new THREE.Vector3().addScaledVector(camRight, input.x).addScaledVector(camForward, input.z).normalize();
-    tryHorizontalMove(dir.x * (run ? settings.runSpeed : settings.walkSpeed) * dt, 0);
-    tryHorizontalMove(0, dir.z * (run ? settings.runSpeed : settings.walkSpeed) * dt);
+    tryHorizontalMove(dir.x * settings.walkSpeed * dt, 0);
+    tryHorizontalMove(0, dir.z * settings.walkSpeed * dt);
     local.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
   }
   velocityY -= 28 * dt;
@@ -276,7 +275,7 @@ function makeNameLabel(text) {
 function getAnimation() {
   if (isClimbing()) return 'climb';
   if (!grounded) return 'jump';
-  if (moving()) return keys.shift && settings.shiftToRun ? 'run' : 'walk';
+  if (moving()) return 'walk';
   return 'idle';
 }
 function moving() { return keys.w || keys.a || keys.s || keys.d || touchVector.lengthSq() > 0.01; }
