@@ -12,8 +12,24 @@ function safeChat(message) {
 
 function getRoom(gameId) {
   const key = String(gameId || 'lobby');
-  if (!rooms.has(key)) rooms.set(key, { players: new Map() });
+  if (!rooms.has(key)) rooms.set(key, { players: new Map(), scripts: loadScripts(key) });
   return rooms.get(key);
+}
+
+function loadScripts(gameId) {
+  const game = db.prepare('SELECT map_data FROM games WHERE id = ?').get(gameId);
+  if (!game) return [];
+  try { return JSON.parse(game.map_data).scripts || []; } catch { return []; }
+}
+
+function runJoinScripts(room, player) {
+  for (const script of room.scripts) {
+    const source = String(script.source || '');
+    const teleport = source.match(/player:teleport\(([-\d.]+),\s*([-\d.]+),\s*([-\d.]+)\)/);
+    if (source.includes('playerJoin') && teleport) {
+      player.position = { x: Number(teleport[1]), y: Number(teleport[2]), z: Number(teleport[3]) };
+    }
+  }
 }
 
 function broadcast(room, data, except) {
@@ -50,6 +66,7 @@ function attachGameServer(server) {
           animation: 'idle',
           chat: ''
         };
+        runJoinScripts(room, self);
         room.players.set(self.id, self);
         db.prepare('UPDATE games SET visit_count = visit_count + 1 WHERE id = ?').run(gameId);
         ws.send(JSON.stringify({ type: 'world_state', players: [...room.players.values()].map(packPlayer) }));
@@ -65,7 +82,6 @@ function attachGameServer(server) {
         const message = safeChat(data.message);
         self.chat = message;
         broadcast(room, { type: 'chat_broadcast', from: self.username, playerId: self.id, message, timestamp: Date.now() });
-        ws.send(JSON.stringify({ type: 'chat_broadcast', from: self.username, playerId: self.id, message, timestamp: Date.now() }));
         setTimeout(() => { if (self) self.chat = ''; }, 5000);
       }
     });

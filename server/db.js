@@ -115,6 +115,26 @@ function migrate() {
       message TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS sessions (
+      sid TEXT PRIMARY KEY,
+      sess TEXT NOT NULL,
+      expired DATETIME NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS forum_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id),
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS forum_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id INTEGER REFERENCES forum_threads(id),
+      user_id INTEGER REFERENCES users(id),
+      body TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
@@ -131,9 +151,13 @@ function seed() {
     version: 1,
     objects: [
       { id: 'baseplate', type: 'Part', name: 'Baseplate', position: { x: 0, y: -0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, size: { x: 80, y: 1, z: 80 }, color: '#6B8E23', material: 'Grass', anchored: true, canCollide: true, transparency: 0, children: [] },
-      { id: 'brick-red', type: 'Part', name: 'Red Brick', position: { x: 5, y: 1, z: -4 }, rotation: { x: 0, y: 0, z: 0 }, size: { x: 4, y: 2, z: 4 }, color: '#c4281c', material: 'Brick', anchored: true, canCollide: true, transparency: 0, children: [] }
+      { id: 'brick-red', type: 'Part', name: 'Red Brick', position: { x: 5, y: 1, z: -4 }, rotation: { x: 0, y: 0, z: 0 }, size: { x: 4, y: 2, z: 4 }, color: '#c4281c', material: 'Brick', anchored: true, canCollide: true, transparency: 0, children: [] },
+      { id: 'jump-pad', type: 'Part', name: 'Jump Test Platform', position: { x: -7, y: 1.5, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, size: { x: 6, y: 1, z: 6 }, color: '#FFD700', material: 'Plastic', anchored: true, canCollide: true, transparency: 0, children: [] },
+      { id: 'stairs-1', type: 'Part', name: 'Step 1', position: { x: -10, y: 0.25, z: 6 }, rotation: { x: 0, y: 0, z: 0 }, size: { x: 4, y: 0.5, z: 2 }, color: '#999999', material: 'Stone', anchored: true, canCollide: true, transparency: 0, children: [] },
+      { id: 'stairs-2', type: 'Part', name: 'Step 2', position: { x: -10, y: 0.75, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, size: { x: 4, y: 1, z: 2 }, color: '#888888', material: 'Stone', anchored: true, canCollide: true, transparency: 0, children: [] },
+      { id: 'wall-test', type: 'Part', name: 'Collision Wall', position: { x: 10, y: 2, z: 6 }, rotation: { x: 0, y: 0, z: 0 }, size: { x: 1, y: 4, z: 10 }, color: '#0d69ac', material: 'Metal', anchored: true, canCollide: true, transparency: 0, children: [] }
     ],
-    spawnPoints: [{ x: 0, y: 4, z: 0 }],
+    spawnPoints: [{ x: 0, y: 3, z: 0 }],
     ambient: '#404040',
     skyColor: '#87CEEB'
   });
@@ -143,6 +167,11 @@ function seed() {
     SELECT 'Classic Baseplate', 'Um mundo inicial para construir, jogar e testar.', ?, ?, '/assets/textures/game-default.svg', 1
     WHERE NOT EXISTS (SELECT 1 FROM games WHERE title = 'Classic Baseplate')
   `).run(adminId, map);
+  db.prepare(`
+    UPDATE games
+    SET map_data = ?, description = 'Um mundo inicial com obstaculos para testar fisica, colisao e pulo.'
+    WHERE title = 'Classic Baseplate'
+  `).run(map);
   db.prepare(`
     INSERT INTO catalog_items (name, description, type, price, creator_id, asset_url, thumbnail_url, hat_transform, is_active)
     SELECT 'Classic Visor', 'Um chapeu simples para o avatar R6.', 'hat', 25, ?, '/assets/catalog/classic-visor.gltf', '/assets/textures/item-default.svg',
