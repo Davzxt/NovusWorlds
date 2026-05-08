@@ -41,7 +41,8 @@ const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || 'novus-worlds-2008-change-me',
   resave: false,
   saveUninitialized: false,
-  cookie: { sameSite: 'lax', maxAge: 24 * 60 * 60 * 1000 }
+  rolling: true,
+  cookie: { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' ? 'auto' : false, maxAge: 30 * 24 * 60 * 60 * 1000 }
 });
 
 app.use(express.json({ limit: '10mb' }));

@@ -35,7 +35,6 @@ scene.add(local);
 const players = new Map();
 const colliders = [];
 for (const object of game.map_data.objects || []) addPart(object);
-addClassicSkyline();
 
 const keys = {};
 let yaw = Math.PI;
@@ -47,6 +46,7 @@ let grounded = false;
 let lastSentChat = 0;
 let touchVector = new THREE.Vector3();
 let touchJump = false;
+let mobileCameraTouch = null;
 
 addEventListener('keydown', (e) => {
   if (document.activeElement === document.getElementById('chatInput')) return;
@@ -160,7 +160,7 @@ function moveAndCollide(dt) {
   const run = keys.shift && settings.shiftToRun;
   if (isMoving) {
     input.normalize();
-    const camForward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    const camForward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const camRight = new THREE.Vector3(camForward.z, 0, -camForward.x);
     const dir = new THREE.Vector3().addScaledVector(camRight, input.x).addScaledVector(camForward, input.z).normalize();
     tryHorizontalMove(dir.x * (run ? settings.runSpeed : settings.walkSpeed) * dt, 0);
@@ -291,17 +291,6 @@ function makeNameLabel(text) {
   return sprite;
 }
 
-function addClassicSkyline() {
-  const ring = new THREE.Group();
-  for (let i = 0; i < 18; i++) {
-    const b = new THREE.Mesh(new THREE.BoxGeometry(6, 4 + (i % 4) * 2, 6), new THREE.MeshStandardMaterial({ color: i % 2 ? '#1a4a8a' : '#0d2d5e' }));
-    const a = (i / 18) * Math.PI * 2;
-    b.position.set(Math.sin(a) * 95, b.geometry.parameters.height / 2 - 1, Math.cos(a) * 95);
-    ring.add(b);
-  }
-  scene.add(ring);
-}
-
 function getAnimation() {
   if (!grounded) return 'jump';
   if (moving()) return keys.shift && settings.shiftToRun ? 'run' : 'walk';
@@ -391,5 +380,22 @@ function setupMobileControls() {
   pad.addEventListener('touchend', () => { active = null; origin = null; touchVector.set(0,0,0); stick.style.transform = 'translate(0,0)'; }, { passive: true });
   jump.addEventListener('touchstart', () => touchJump = true, { passive: true });
   jump.addEventListener('touchend', () => touchJump = false, { passive: true });
+  renderer.domElement.addEventListener('touchstart', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.clientX > innerWidth * 0.42) mobileCameraTouch = { id: t.identifier, x: t.clientX, y: t.clientY };
+    }
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchmove', (e) => {
+    if (!mobileCameraTouch) return;
+    const t = [...e.changedTouches].find(x => x.identifier === mobileCameraTouch.id);
+    if (!t) return;
+    yaw -= (t.clientX - mobileCameraTouch.x) * settings.mouseSensitivity;
+    pitch = THREE.MathUtils.clamp(pitch - (t.clientY - mobileCameraTouch.y) * settings.mouseSensitivity, -1.1, 0.45);
+    mobileCameraTouch.x = t.clientX;
+    mobileCameraTouch.y = t.clientY;
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchend', (e) => {
+    if ([...e.changedTouches].some(x => x.identifier === mobileCameraTouch?.id)) mobileCameraTouch = null;
+  }, { passive: true });
 }
 setupMobileControls();

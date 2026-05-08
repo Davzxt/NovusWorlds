@@ -41,6 +41,8 @@ router.post('/register', async (req, res) => {
     const hash = await bcrypt.hash(password, 12);
     const avatar = JSON.stringify({ colors: { head: '#f5cd30', torso: '#0d69ac', arms: '#f5cd30', legs: '#1b2a35' }, hats: [] });
     const info = db.prepare('INSERT INTO users (username, password_hash, novux, avatar_data) VALUES (?, ?, ?, ?)').run(username, hash, bonus, avatar);
+    const freeItems = db.prepare("SELECT id FROM catalog_items WHERE price = 0 OR name = 'Classic Visor'").all();
+    for (const item of freeItems) db.prepare('INSERT OR IGNORE INTO user_inventory (user_id, item_id) VALUES (?, ?)').run(info.lastInsertRowid, item.id);
     db.prepare('INSERT INTO transactions (to_user_id, amount, type, description) VALUES (?, ?, ?, ?)').run(info.lastInsertRowid, bonus, 'bonus', 'Bonus de registro');
     db.prepare('INSERT INTO activity_log (type, message) VALUES (?, ?)').run('user', `Novo usuario: ${username}`);
     req.session.user = publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid));

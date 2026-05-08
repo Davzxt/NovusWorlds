@@ -204,6 +204,13 @@ function seed() {
       WHERE NOT EXISTS (SELECT 1 FROM catalog_items WHERE name = ?)
     `).run(face[0], face[1], adminId, face[2], face[0]);
   }
+  const freeItems = db.prepare("SELECT id FROM catalog_items WHERE price = 0 OR name = 'Classic Visor'").all();
+  const users = db.prepare('SELECT id FROM users WHERE deleted_at IS NULL').all();
+  for (const user of users) {
+    for (const item of freeItems) {
+      db.prepare('INSERT OR IGNORE INTO user_inventory (user_id, item_id) VALUES (?, ?)').run(user.id, item.id);
+    }
+  }
   db.prepare('INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)').run('platform_name', 'Novus Worlds');
   db.prepare('INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)').run('register_bonus', '100');
 }
