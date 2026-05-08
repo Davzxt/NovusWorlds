@@ -1,13 +1,20 @@
 import { api, toast } from './main.js';
-import { createR6Viewer } from './r6-viewer.js';
+import { createR6Viewer, applyHats } from './r6-viewer.js';
 
 const state = { colors: { head: '#f5cd30', torso: '#0d69ac', arms: '#f5cd30', legs: '#1b2a35' }, hats: [] };
 const data = await api('/api/avatar/me').catch(() => null);
 if (data) Object.assign(state, data.avatar || {});
 const viewer = createR6Viewer(document.getElementById('avatarPreview'), { avatar: state, spin: false });
 function refreshPreview() {
-  viewer.avatar.clear();
-  import('./r6-viewer.js').then(m => viewer.avatar.add(m.blockR6(state)));
+  viewer.avatar.traverse((obj) => {
+    if (!obj.isMesh || !obj.material?.color) return;
+    const n = obj.name.toLowerCase();
+    if (n.includes('head') || n.includes('pyramid')) obj.material.color.set(state.colors.head || '#f5cd30');
+    else if (n.includes('arm')) obj.material.color.set(state.colors.arms || '#f5cd30');
+    else if (n.includes('leg') || n === 'mesh') obj.material.color.set(state.colors.legs || '#1b2a35');
+    else obj.material.color.set(state.colors.torso || '#0d69ac');
+  });
+  applyHats(viewer.avatar, state);
   avatarSummary.textContent = `Face: ${state.face || 'Classic Smile'} | Chapeus: ${(state.hats || []).length}/3`;
 }
 const palette = ['#f5cd30','#ffaf00','#d7c59a','#a3a2a5','#ffffff','#111111','#0d69ac','#0055bf','#4b974b','#287f47','#c4281c','#ff0000','#b480ff','#8e44ad','#ff66cc','#f2f3f3'];
@@ -21,10 +28,11 @@ const inv = document.getElementById('inventory');
 const inventory = data?.inventory || [];
 inv.innerHTML = inventory.filter(i => i.type !== 'face').map(i => `<div class="card"><b>${i.name}</b><p>${i.type}</p><button data-id="${i.id}">${state.hats?.includes(i.id) ? 'Remover' : 'Equipar'}</button></div>`).join('') || '<p>Nenhum item comprado ainda.</p>';
 inv.onclick = (e) => {
-  const id = Number(e.target.dataset.id);
+const id = Number(e.target.dataset.id);
   if (!id) return;
   state.hats = state.hats || [];
   state.hats = state.hats.includes(id) ? state.hats.filter(x => x !== id) : [...state.hats, id].slice(0, 3);
+  state.equippedItems = inventory.filter(i => state.hats.includes(i.id));
   e.target.textContent = state.hats.includes(id) ? 'Remover' : 'Equipar';
   refreshPreview();
 };

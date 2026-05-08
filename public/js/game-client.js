@@ -1,12 +1,11 @@
 import * as THREE from '/vendor/three/build/three.module.js';
-import { GLTFLoader } from '/vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { api, currentUser, esc } from './main.js';
-import { blockR6, createFaceOverlay } from './r6-viewer.js';
+import { createR6Avatar } from './r6-viewer.js';
 
 const id = new URLSearchParams(location.search).get('id') || '1';
 const { game } = await api('/api/games/' + id);
 const user = await currentUser() || { id: Math.random().toString(36).slice(2), username: 'Guest', avatar_data: {} };
-const settings = loadSettings();
+const settings = { mouseSensitivity: 0.004, walkSpeed: 7.5, runSpeed: 12, jumpPower: 11, fov: 70, shiftToRun: true, graphics: 'high' };
 const guestKey = getGuestKey();
 
 document.getElementById('gameTitle').textContent = game.title;
@@ -51,7 +50,6 @@ let mobileCameraTouch = null;
 addEventListener('keydown', (e) => {
   if (document.activeElement === document.getElementById('chatInput')) return;
   keys[e.key.toLowerCase()] = true;
-  if (e.key === 'Escape') toggleSettings(false);
 });
 addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -92,10 +90,6 @@ document.getElementById('chatInput').addEventListener('keydown', (e) => {
   e.target.value = '';
 });
 document.getElementById('leaveBtn').onclick = () => location.href = '/games.html';
-document.getElementById('settingsBtn').onclick = () => toggleSettings(true);
-document.getElementById('settingsClose').onclick = () => toggleSettings(false);
-bindSettings();
-
 function addPart(o) {
   const material = materialFor(o);
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.size.x, o.size.y, o.size.z), material);
@@ -115,25 +109,7 @@ function materialFor(o) {
 async function createCharacter(avatarData, isLocal = false) {
   const group = new THREE.Group();
   group.userData.parts = {};
-  try {
-    const gltf = await new GLTFLoader().loadAsync('/assets/r6/r6.gltf');
-    const model = gltf.scene;
-    model.scale.setScalar(1.35);
-    model.traverse((obj) => {
-      if (!obj.isMesh) return;
-      obj.material = obj.material.clone();
-      obj.castShadow = true;
-      const y = obj.getWorldPosition(new THREE.Vector3()).y;
-      if (y > 1.8) obj.material.color.set(avatarData?.colors?.head || '#f5cd30');
-      else if (Math.abs(obj.position.x) > 0.5 && y > 0.8) obj.material.color.set(avatarData?.colors?.arms || '#f5cd30');
-      else if (y < 0.8) obj.material.color.set(avatarData?.colors?.legs || '#1b2a35');
-      else obj.material.color.set(avatarData?.colors?.torso || '#0d69ac');
-    });
-    group.add(model);
-    group.add(createFaceOverlay(avatarData, true));
-  } catch {
-    group.add(blockR6(avatarData));
-  }
+  group.add(await createR6Avatar(avatarData));
   const label = makeNameLabel(isLocal ? user.username : '');
   label.position.y = 4.0;
   group.add(label);
@@ -142,26 +118,31 @@ async function createCharacter(avatarData, isLocal = false) {
 }
 
 function animateR6(group, name, t) {
-  const meshes = group.children[0]?.children?.length ? group.children[0].children : [];
-  const swing = name === 'idle' ? Math.sin(t * 2) * 0.02 : Math.sin(t * (name === 'run' ? 12 : 8)) * 0.22;
-  meshes.forEach((m) => {
-    const x = m.position?.x || 0;
-    const y = m.position?.y || 0;
-    if (y > 1.8) return;
-    if (Math.abs(x) > 0.55 && y > 0.8) m.rotation.x = x > 0 ? -swing : swing;
-    if (y < 0.8) m.rotation.x = x > 0 ? swing : -swing;
+  const root = group.children[0]?.children?.find?.(c => c.type === 'Group') || group.children[0];
+  const parts = root?.children || [];
+  const speed = name === 'run' ? 12 : name === 'walk' ? 8 : name === 'climb' ? 10 : 2;
+  const swing = Math.sin(t * speed);
+  parts.forEach((m) => {
+    const x = m.position?.x || 0, y = m.position?.y || 0;
+    m.rotation.x *= 0.75;
+    m.rotation.z *= 0.75;
+    if (name === 'idle') { if (y > 1.8) m.rotation.y = Math.sin(t * 1.5) * 0.04; return; }
+    if (name === 'jump') { if (Math.abs(x) > .55 && y > .8) m.rotation.x = -0.45; if (y < .8) m.rotation.x = 0.25; return; }
+    if (name === 'climb') { if (Math.abs(x) > .55 || y < .8) m.rotation.x = swing * 0.65; return; }
+    if (Math.abs(x) > .55 && y > .8) m.rotation.x = (x > 0 ? -swing : swing) * 0.42;
+    if (y < .8) m.rotation.x = (x > 0 ? swing : -swing) * 0.36;
   });
 }
 
 function moveAndCollide(dt) {
   const touch = getTouchMove();
-  const input = touch.lengthSq() ? touch : new THREE.Vector3((keys.d ? 1 : 0) - (keys.a ? 1 : 0), 0, (keys.w ? 1 : 0) - (keys.s ? 1 : 0));
+  const input = touch.lengthSq() ? touch : new THREE.Vector3((keys.a ? 1 : 0) - (keys.d ? 1 : 0), 0, (keys.w ? 1 : 0) - (keys.s ? 1 : 0));
   const isMoving = input.lengthSq() > 0;
   const run = keys.shift && settings.shiftToRun;
   if (isMoving) {
     input.normalize();
     const camForward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-    const camRight = new THREE.Vector3(camForward.z, 0, -camForward.x);
+    const camRight = new THREE.Vector3(-camForward.z, 0, camForward.x);
     const dir = new THREE.Vector3().addScaledVector(camRight, input.x).addScaledVector(camForward, input.z).normalize();
     tryHorizontalMove(dir.x * (run ? settings.runSpeed : settings.walkSpeed) * dt, 0);
     tryHorizontalMove(0, dir.z * (run ? settings.runSpeed : settings.walkSpeed) * dt);
@@ -234,7 +215,8 @@ function syncPlayers(list) {
     if (String(p.id) === String(user.id)) continue;
     let entry = players.get(p.id);
     if (!entry) {
-      const group = blockR6(p.avatar);
+      const group = new THREE.Group();
+      createR6Avatar(p.avatar).then(avatar => group.add(avatar)).catch(err => novusFatal?.(err));
       group.userData.label = makeNameLabel(p.username);
       group.userData.label.position.y = 4;
       group.add(group.userData.label);
@@ -292,11 +274,16 @@ function makeNameLabel(text) {
 }
 
 function getAnimation() {
+  if (isClimbing()) return 'climb';
   if (!grounded) return 'jump';
   if (moving()) return keys.shift && settings.shiftToRun ? 'run' : 'walk';
   return 'idle';
 }
 function moving() { return keys.w || keys.a || keys.s || keys.d; }
+function isClimbing() {
+  if (!moving() || grounded) return false;
+  return colliders.some(c => Math.abs(local.position.x - c.position.x) < c.userData.half.x + .5 && Math.abs(local.position.z - c.position.z) < c.userData.half.z + .5 && c.userData.half.y > 1.4);
+}
 function packVec(v) { return { x: v.x, y: v.y, z: v.z }; }
 
 let last = performance.now();
@@ -316,31 +303,6 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
-
-function loadSettings() {
-  return {
-    mouseSensitivity: 0.004,
-    walkSpeed: 7.5,
-    runSpeed: 12,
-    jumpPower: 11,
-    fov: 70,
-    shiftToRun: true,
-    graphics: 'high',
-    ...JSON.parse(localStorage.getItem('novusClientSettings') || '{}')
-  };
-}
-function saveSettings() { localStorage.setItem('novusClientSettings', JSON.stringify(settings)); }
-function toggleSettings(show) { document.getElementById('settingsPanel').classList.toggle('hidden', !show); }
-function bindSettings() {
-  for (const input of document.querySelectorAll('[data-setting]')) {
-    const key = input.dataset.setting;
-    input.type === 'checkbox' ? input.checked = !!settings[key] : input.value = settings[key];
-    input.addEventListener('input', () => {
-      settings[key] = input.type === 'checkbox' ? input.checked : Number(input.value);
-      saveSettings();
-    });
-  }
-}
 
 function getGuestKey() {
   let key = localStorage.getItem('novusGuestKey');

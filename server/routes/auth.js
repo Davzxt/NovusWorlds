@@ -11,12 +11,17 @@ function cleanUsername(username) {
 
 function publicUser(row) {
   if (!row) return null;
+  const avatar = JSON.parse(row.avatar_data || '{}');
+  const hats = (avatar.hats || []).slice(0, 3);
+  avatar.equippedItems = hats.length
+    ? db.prepare(`SELECT id, name, type, hat_transform, asset_url, model_url FROM catalog_items WHERE id IN (${hats.map(() => '?').join(',')})`).all(...hats).map((item) => ({ ...item, hat_transform: JSON.parse(item.hat_transform || '{}') }))
+    : [];
   return {
     id: row.id,
     username: row.username,
     novux: row.novux,
     is_admin: !!row.is_admin,
-    avatar_data: JSON.parse(row.avatar_data || '{}'),
+    avatar_data: avatar,
     created_at: row.created_at,
     login_notice: row.login_notice
   };
