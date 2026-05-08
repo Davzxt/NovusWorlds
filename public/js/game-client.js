@@ -127,10 +127,10 @@ function animateR6(group, name, t) {
     m.rotation.x *= 0.75;
     m.rotation.z *= 0.75;
     if (name === 'idle') { if (y > 1.8) m.rotation.y = Math.sin(t * 1.5) * 0.04; return; }
-    if (name === 'jump') { if (Math.abs(x) > .55 && y > .8) m.rotation.x = -0.45; if (y < .8) m.rotation.x = 0.25; return; }
-    if (name === 'climb') { if (Math.abs(x) > .55 || y < .8) m.rotation.x = swing * 0.65; return; }
-    if (Math.abs(x) > .55 && y > .8) m.rotation.x = (x > 0 ? -swing : swing) * 0.42;
-    if (y < .8) m.rotation.x = (x > 0 ? swing : -swing) * 0.36;
+    if (name === 'jump') { if (Math.abs(x) > .55 && y > .8) m.rotation.x = 0.45; if (y < .8) m.rotation.x = -0.25; return; }
+    if (name === 'climb') { if (Math.abs(x) > .55 || y < .8) m.rotation.x = -swing * 0.65; return; }
+    if (Math.abs(x) > .55 && y > .8) m.rotation.x = (x > 0 ? swing : -swing) * 0.42;
+    if (y < .8) m.rotation.x = (x > 0 ? -swing : swing) * 0.36;
   });
 }
 

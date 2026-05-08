@@ -1,8 +1,10 @@
 const path = require('path');
+const fs = require('fs');
 const bcrypt = require('bcrypt');
 const Database = require('better-sqlite3');
 
 const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '..', 'novus.sqlite');
+restoreSupabaseBackupSync(dbPath);
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
@@ -224,3 +226,58 @@ module.exports = db;
 if (process.argv.includes('--seed')) {
   console.log('Novus Worlds database migrated and seeded.');
 }
+
+function supabaseConfig() {
+  return {
+    url: process.env.SUPABASE_URL,
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+  };
+}
+
+function restoreSupabaseBackupSync(targetPath) {
+  const { url, key } = supabaseConfig();
+  if (!url || !key || fs.existsSync(targetPath)) return;
+  try {
+    const script = `
+      const fs = require('fs');
+      const url = '${url.replace(/'/g, "\\'")}';
+      const key = '${key.replace(/'/g, "\\'")}';
+      const target = '${targetPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}';
+      fetch(url + '/rest/v1/app_backups?id=eq.novus_sqlite&select=data_base64,updated_at', {
+        headers: { apikey: key, authorization: 'Bearer ' + key }
+      }).then(r => r.ok ? r.json() : []).then(rows => {
+        if (rows[0] && rows[0].data_base64) fs.writeFileSync(target, Buffer.from(rows[0].data_base64, 'base64'));
+      }).catch(() => {});
+    `;
+    require('child_process').execFileSync(process.execPath, ['-e', script], { timeout: 20000, stdio: 'ignore' });
+  } catch {}
+}
+
+let backupTimer = null;
+function scheduleSupabaseBackup() {
+  const { url, key } = supabaseConfig();
+  if (!url || !key || backupTimer) return;
+  const run = async () => {
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      const data = fs.readFileSync(dbPath).toString('base64');
+      const body = JSON.stringify({ id: 'novus_sqlite', data_base64: data, updated_at: new Date().toISOString() });
+      await fetch(`${url}/rest/v1/app_backups`, {
+        method: 'POST',
+        headers: {
+          apikey: key,
+          authorization: `Bearer ${key}`,
+          'content-type': 'application/json',
+          prefer: 'resolution=merge-duplicates'
+        },
+        body
+      });
+    } catch (err) {
+      console.warn('Supabase backup failed:', err.message);
+    }
+  };
+  backupTimer = setInterval(run, Number(process.env.SUPABASE_BACKUP_INTERVAL_MS || 30000));
+  setTimeout(run, 2500);
+}
+
+scheduleSupabaseBackup();

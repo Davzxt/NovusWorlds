@@ -77,7 +77,7 @@ router.post('/catalog/add', upload.fields([{ name: 'asset', maxCount: 1 }, { nam
   const model = f.model?.[0] ? `/uploads/catalog/${f.model[0].filename}` : null;
   const name = String(req.body.name || '').trim().slice(0, 80);
   if (!name) return res.status(400).json({ error: 'Nome obrigatorio.' });
-  const transform = req.body.hat_transform || '{"position":{"x":0,"y":2.85,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1}}';
+  const transform = req.body.hat_transform || '{"position":{"x":0,"y":3.38,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1}}';
   const info = db.prepare('INSERT INTO catalog_items (name, description, type, price, creator_id, asset_url, model_url, thumbnail_url, hat_transform, is_limited, limited_quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(name, String(req.body.description || '').slice(0, 500), type, Number(req.body.price || 0), req.session.user.id, asset, model, asset || '/assets/textures/item-default.svg', transform, req.body.is_limited ? 1 : 0, req.body.limited_quantity || null);
   db.prepare('INSERT INTO activity_log (type, message) VALUES (?, ?)').run('catalog', `Novo item: ${name}`);

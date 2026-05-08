@@ -76,3 +76,25 @@ No plano gratuito, trate como alpha publico, nao como producao massiva.
 ## Persistencia no Render
 
 Se voce nao configurar `DATABASE_PATH=/var/data/novus.sqlite` e um Persistent Disk montado em `/var/data`, o banco volta a nascer do zero em redeploy. Isso apaga contas, jogos, visitas, inventario e sessoes. Com Disk persistente, o SQLite fica salvo fora do pacote do deploy.
+
+## Persistencia gratis com Supabase
+
+Se voce nao pode usar Render Disk, use Supabase como backup do SQLite.
+
+No Supabase SQL Editor, rode:
+
+```sql
+create table if not exists app_backups (
+  id text primary key,
+  data_base64 text not null,
+  updated_at timestamptz default now()
+);
+```
+
+No Render, adicione:
+
+- `SUPABASE_URL`: URL do projeto Supabase.
+- `SUPABASE_SERVICE_ROLE_KEY`: service role key do Supabase.
+- `SUPABASE_BACKUP_INTERVAL_MS`: opcional, padrao `30000`.
+
+O servidor restaura o banco salvo no Supabase quando `novus.sqlite` nao existe e faz backup automatico do SQLite para a tabela `app_backups`. Nao exponha a service role key no frontend.

@@ -10,10 +10,10 @@ table.onclick = async e => { if (!e.target.dataset.id) return; await api(`/api/a
 document.getElementById('openAdd').onclick = () => document.getElementById('modal').classList.remove('hidden');
 document.getElementById('cancel').onclick = () => document.getElementById('modal').classList.add('hidden');
 const viewer = createR6Viewer(document.getElementById('hatPreview'), { spin:false });
-const transform = { position:{x:0,y:2.85,z:0}, rotation:{x:0,y:0,z:0}, scale:{x:1,y:1,z:1} };
+const transform = { position:{x:0,y:3.38,z:0}, rotation:{x:0,y:0,z:0}, scale:{x:1,y:1,z:1} };
 for (const input of document.querySelectorAll('[data-t]')) input.oninput = () => { const [group,key]=input.dataset.t.split('.'); transform[group][key]=Number(input.value); document.querySelector(`[data-n="${input.dataset.t}"]`).value=input.value; viewer.setHatTransform(transform); };
 for (const input of document.querySelectorAll('[data-n]')) input.oninput = () => { const slider=document.querySelector(`[data-t="${input.dataset.n}"]`); slider.value=input.value; slider.dispatchEvent(new Event('input')); };
-document.getElementById('fitHead').onclick=()=>{Object.assign(transform.position,{x:0,y:2.85,z:0});Object.assign(transform.rotation,{x:0,y:0,z:0});Object.assign(transform.scale,{x:1,y:1,z:1});syncControls();viewer.setHatTransform(transform)};
+document.getElementById('fitHead').onclick=()=>{Object.assign(transform.position,{x:0,y:3.38,z:0});Object.assign(transform.rotation,{x:0,y:0,z:0});Object.assign(transform.scale,{x:1,y:1,z:1});syncControls();viewer.setHatTransform(transform)};
 document.getElementById('reset').onclick=document.getElementById('fitHead').onclick;
 function syncControls(){for(const el of document.querySelectorAll('[data-t]')){const[g,k]=el.dataset.t.split('.');el.value=transform[g][k];document.querySelector(`[data-n="${el.dataset.t}"]`).value=el.value}}
 document.getElementById('addForm').onsubmit = async e => {
