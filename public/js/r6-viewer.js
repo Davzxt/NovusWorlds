@@ -26,6 +26,7 @@ export function createR6Viewer(container, options = {}) {
   new GLTFLoader().load('/assets/r6/r6.gltf', (gltf) => {
     avatar.add(gltf.scene);
     applyAvatarColors(avatar, options.avatar);
+    avatar.add(createFaceOverlay(options.avatar, true));
   }, undefined, () => avatar.add(blockR6(options.avatar)));
   let hat = null;
   function setHatTransform(t = {}) {
@@ -67,16 +68,24 @@ export function blockR6(avatarData = {}) {
   part('left_arm', [.45, 1.1, .5], [-.75, 1.55, 0], colors.arms || '#f5cd30');
   part('right_arm', [.45, 1.1, .5], [.75, 1.55, 0], colors.arms || '#f5cd30');
   part('head', [.9, .9, .9], [0, 2.55, 0], colors.head || '#f5cd30');
+  group.add(createFaceOverlay(avatarData, false));
+  return group;
+}
+
+export function createFaceOverlay(avatarData = {}, gltfRig = false) {
   const face = new THREE.Group();
   const eyeMat = new THREE.MeshBasicMaterial({ color: '#111111' });
   const mouthMat = new THREE.MeshBasicMaterial({ color: avatarData.face === 'Serious Face' ? '#333333' : '#8b1a1a' });
   const eye1 = new THREE.Mesh(new THREE.BoxGeometry(.08, .08, .02), eyeMat);
   const eye2 = eye1.clone();
   const mouth = new THREE.Mesh(new THREE.BoxGeometry(avatarData.face === 'Chill Face' ? .34 : .28, .05, .02), mouthMat);
-  eye1.position.set(-.18, 2.62, -.46); eye2.position.set(.18, 2.62, -.46); mouth.position.set(0, avatarData.face === 'Serious Face' ? 2.42 : 2.38, -.46);
+  const y = gltfRig ? 3.03 : 2.62;
+  const mouthY = gltfRig ? 2.82 : (avatarData.face === 'Serious Face' ? 2.42 : 2.38);
+  const z = gltfRig ? -0.68 : -0.61;
+  eye1.position.set(-.18, y, z); eye2.position.set(.18, y, z); mouth.position.set(0, mouthY, z);
   face.add(eye1, eye2, mouth);
-  group.add(face);
-  return group;
+  face.name = 'face_overlay';
+  return face;
 }
 
 function applyAvatarColors(root, avatarData = {}) {

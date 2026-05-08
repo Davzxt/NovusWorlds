@@ -1,7 +1,7 @@
 import * as THREE from '/vendor/three/build/three.module.js';
 import { GLTFLoader } from '/vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { api, currentUser, esc } from './main.js';
-import { blockR6 } from './r6-viewer.js';
+import { blockR6, createFaceOverlay } from './r6-viewer.js';
 
 const id = new URLSearchParams(location.search).get('id') || '1';
 const { game } = await api('/api/games/' + id);
@@ -128,6 +128,7 @@ async function createCharacter(avatarData, isLocal = false) {
       else obj.material.color.set(avatarData?.colors?.torso || '#0d69ac');
     });
     group.add(model);
+    group.add(createFaceOverlay(avatarData, true));
   } catch {
     group.add(blockR6(avatarData));
   }
@@ -353,10 +354,14 @@ function bindSettings() {
 function getGuestKey() {
   let key = localStorage.getItem('novusGuestKey');
   if (!key) {
-    key = crypto.randomUUID();
+    key = randomId();
     localStorage.setItem('novusGuestKey', key);
   }
   return key;
+}
+
+function randomId() {
+  return globalThis.crypto?.randomUUID ? crypto.randomUUID() : `guest_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
 let touchVector = new THREE.Vector3();
