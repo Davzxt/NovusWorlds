@@ -54,6 +54,18 @@ app.get('/admin/catalog', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/admin/catalog.html'));
 });
 
+app.get('/settings', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/settings.html'));
+});
+
+app.get('/friends', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/friends.html'));
+});
+
+app.get('/chat', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/chat.html'));
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });

@@ -15,6 +15,7 @@
           <a href="/">Home</a>
           <a href="/games.html">Games</a>
           <a href="/catalog.html">Catalog</a>
+          <a href="/studio.html">Studio</a>
           <a href="/forum.html">Forum</a>
           <a href="/about.html">About</a>
         </nav>
@@ -22,19 +23,6 @@
           <div class="logged-out">
             <a href="/login.html" class="btn btn-secondary">Log In</a>
             <a href="/register.html" class="btn btn-primary">Sign Up</a>
-          </div>
-          <div class="logged-in hidden">
-            <span class="novux-balance" id="novux-balance">0 Ƀ</span>
-            <div class="dropdown">
-              <button class="btn btn-secondary dropdown-toggle" id="header-username">Username</button>
-              <div class="dropdown-menu hidden">
-                <a href="/profile.html" class="dropdown-item">My Profile</a>
-                <a href="/avatar.html" class="dropdown-item">Avatar</a>
-                <a href="/studio.html" class="dropdown-item">Studio</a>
-                <a href="/admin/" class="dropdown-item admin-link">Admin</a>
-                <button id="logout-btn" class="dropdown-item" style="width:100%;border:none;background:none;text-align:left;">Log Out</button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -44,21 +32,21 @@
   <section class="banner">
     <div class="container">
       <h1>Crie. Jogue. Explore.</h1>
-      <p>Uma plataforma de jogos infinitos criados por você</p>
+      <p>A plataforma de jogos online inspirada em 2008</p>
     </div>
   </section>
 
   <main class="main-content">
     <div class="container">
       <section style="margin-bottom: 50px;">
-        <h2 class="section-title">Featured Games</h2>
+        <h2 class="section-title">Jogos em Destaque</h2>
         <div class="game-grid" id="featured-games">
           <div class="loading"><div class="spinner"></div></div>
         </div>
       </section>
 
       <section>
-        <h2 class="section-title">Featured Items</h2>
+        <h2 class="section-title">Itens em Destaque</h2>
         <div class="card-grid" id="featured-items">
           <div class="loading"><div class="spinner"></div></div>
         </div>
@@ -66,7 +54,7 @@
     </div>
   </main>
 
-<footer class="footer">
+  <footer class="footer">
     <div class="container">
       <div class="footer-content">
         <div class="footer-links">
@@ -74,72 +62,135 @@
           <a href="/terms.html">Terms</a>
           <a href="/privacy.html">Privacy</a>
           <a href="/forum.html">Forum</a>
+          <a href="/contact.html">Contact</a>
         </div>
         <p class="footer-copyright">© 2008 Novus Worlds</p>
       </div>
     </div>
   </footer>
 
-  <script src="/js/auth.js"></script>
   <script>
-    async function loadFeaturedGames() {
+    async function loadFeatured() {
       try {
-        const response = await fetch('/api/games/featured');
-        const data = await response.json();
-        const container = document.getElementById('featured-games');
+        const resGames = await fetch('/api/games/featured');
+        const dataGames = await resGames.json();
+        const gamesEl = document.getElementById('featured-games');
         
-        if (data.games.length === 0) {
-          container.innerHTML = '<p style="color:#fff;">No games yet. Be the first to create one!</p>';
-          return;
+        if (dataGames.games && dataGames.games.length > 0) {
+          gamesEl.innerHTML = dataGames.games.map(g => `
+            <div class="card-item" onclick="location.href='/game.html?id=${g.id}'">
+              <div class="card-thumbnail">🎮</div>
+              <div class="card-info">
+                <div class="card-title">${g.title}</div>
+                <div class="card-meta">by ${g.creator_username}</div>
+                <div class="card-meta">${g.visit_count || 0} visits</div>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          gamesEl.innerHTML = `
+            <div class="card-item" onclick="location.href='/game.html?id=1'">
+              <div class="card-thumbnail">🏃</div>
+              <div class="card-info">
+                <div class="card-title">Test Physics World</div>
+                <div class="card-meta">by NovusWorlds</div>
+                <div class="card-meta">Test the physics!</div>
+              </div>
+            </div>
+          `;
         }
+
+        const resItems = await fetch('/api/catalog/featured');
+        const dataItems = await resItems.json();
+        const itemsEl = document.getElementById('featured-items');
         
-        container.innerHTML = data.games.map(game => `
-          <div class="card-item" onclick="window.location.href='/game.html?id=${game.id}'">
-            <div class="card-thumbnail">
-              ${game.thumbnail_url ? `<img src="${game.thumbnail_url}" alt="${game.title}">` : '<span style="color:#999;">No Image</span>'}
+        if (dataItems.items && dataItems.items.length > 0) {
+          itemsEl.innerHTML = dataItems.items.map(i => `
+            <div class="card-item" onclick="location.href='/item.html?id=${i.id}'">
+              <div class="card-thumbnail">👕</div>
+              <div class="card-info">
+                <div class="card-title">${i.name}</div>
+                <div class="card-price">${i.price} Ƀ</div>
+              </div>
             </div>
-            <div class="card-info">
-              <div class="card-title">${game.title}</div>
-              <div class="card-meta">by ${game.creator_username}</div>
-              <div class="card-meta">${game.visit_count} visits</div>
+          `).join('');
+        } else {
+          itemsEl.innerHTML = `
+            <div class="card-item" onclick="location.href='/catalog.html'">
+              <div class="card-thumbnail">🧢</div>
+              <div class="card-info">
+                <div class="card-title">Classic Cap</div>
+                <div class="card-price">50 Ƀ</div>
+              </div>
             </div>
-          </div>
-        `).join('');
-      } catch (error) {
-        document.getElementById('featured-games').innerHTML = '<p style="color:#fff;">Error loading games</p>';
+            <div class="card-item" onclick="location.href='/catalog.html'">
+              <div class="card-thumbnail">😎</div>
+              <div class="card-info">
+                <div class="card-title">Cool Shades</div>
+                <div class="card-price">30 Ƀ</div>
+              </div>
+            </div>
+            <div class="card-item" onclick="location.href='/catalog.html'">
+              <div class="card-thumbnail">👔</div>
+              <div class="card-info">
+                <div class="card-title">Formal Shirt</div>
+                <div class="card-price">80 Ƀ</div>
+              </div>
+            </div>
+            <div class="card-item" onclick="location.href='/catalog.html'">
+              <div class="card-thumbnail">👖</div>
+              <div class="card-info">
+                <div class="card-title">Blue Jeans</div>
+                <div class="card-price">60 Ƀ</div>
+              </div>
+            </div>
+          `;
+        }
+      } catch (err) {
+        console.error(err);
       }
     }
 
-    async function loadFeaturedItems() {
+    async function checkAuth() {
       try {
-        const response = await fetch('/api/catalog/featured');
-        const data = await response.json();
-        const container = document.getElementById('featured-items');
+        const res = await fetch('/api/auth/session');
+        const data = await res.json();
         
-        if (data.items.length === 0) {
-          container.innerHTML = '<p style="color:#fff;">No items yet.</p>';
-          return;
+        if (data.authenticated) {
+          const hr = document.getElementById('header-right');
+          hr.innerHTML = `
+            <span class="novux-balance">${data.user.novux}</span>
+            <div class="dropdown">
+              <button class="btn btn-secondary dropdown-toggle" id="user-btn">${data.user.username}</button>
+              <div class="dropdown-menu" id="user-menu">
+                <a href="/profile.html?user=${data.user.username}" class="dropdown-item">My Profile</a>
+                <a href="/avatar.html" class="dropdown-item">My Avatar</a>
+                <a href="/studio.html" class="dropdown-item">Studio</a>
+                ${data.user.isAdmin ? '<a href="/admin/" class="dropdown-item">Admin Panel</a>' : ''}
+                <a href="/settings.html" class="dropdown-item">Settings</a>
+                <a href="/friends.html" class="dropdown-item">Friends</a>
+                <button id="logout-btn" class="dropdown-item" style="width:100%;border:none;background:none;cursor:pointer;">Log Out</button>
+              </div>
+            </div>
+          `;
+          
+          document.getElementById('user-btn').addEventListener('click', () => {
+            document.getElementById('user-menu').classList.toggle('show');
+          });
+          
+          document.getElementById('logout-btn').addEventListener('click', async () => {
+            await fetch('/api/auth/logout', {method:'POST'});
+            location.reload();
+          });
         }
-        
-        container.innerHTML = data.items.map(item => `
-          <div class="card-item" onclick="window.location.href='/item.html?id=${item.id}'">
-            <div class="card-thumbnail">
-              ${item.thumbnail_url ? `<img src="${item.thumbnail_url}" alt="${item.name}">` : '<span style="color:#999;">No Image</span>'}
-            </div>
-            <div class="card-info">
-              <div class="card-title">${item.name}</div>
-              <div class="card-price">${item.price} Ƀ</div>
-            </div>
-          </div>
-        `).join('');
-      } catch (error) {
-        document.getElementById('featured-items').innerHTML = '<p style="color:#fff;">Error loading items</p>';
+      } catch (err) {
+        console.error(err);
       }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      loadFeaturedGames();
-      loadFeaturedItems();
+      checkAuth();
+      loadFeatured();
     });
   </script>
 </body>
