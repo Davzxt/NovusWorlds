@@ -45,6 +45,8 @@ let rightMouse = false;
 let velocityY = 0;
 let grounded = false;
 let lastSentChat = 0;
+let touchVector = new THREE.Vector3();
+let touchJump = false;
 
 addEventListener('keydown', (e) => {
   if (document.activeElement === document.getElementById('chatInput')) return;
@@ -364,8 +366,6 @@ function randomId() {
   return globalThis.crypto?.randomUUID ? crypto.randomUUID() : `guest_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-let touchVector = new THREE.Vector3();
-let touchJump = false;
 function getTouchMove() { return touchVector.clone(); }
 function setupMobileControls() {
   if (!matchMedia('(pointer: coarse), (max-width: 780px)').matches) return;
