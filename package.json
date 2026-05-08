@@ -1,0 +1,21 @@
+{
+  "name": "novus-worlds",
+  "version": "1.0.0",
+  "description": "Novus Worlds, a retro 2008 browser multiplayer platform.",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "seed": "node server/db.js --seed"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^12.4.1",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "multer": "^2.0.2",
+    "uuid": "^9.0.1",
+    "ws": "^8.17.1"
+  }
+}
