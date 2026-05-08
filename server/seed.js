@@ -134,3 +134,9 @@ async function seed() {
 seed().catch(console.error).finally(() => {
   process.exit(0);
 });
+
+async function seedDatabase() {
+  return seed();
+}
+
+module.exports = { seedDatabase };

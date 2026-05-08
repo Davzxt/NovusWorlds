@@ -15,6 +15,7 @@ const adminRoutes = require('./routes/admin');
 
 const { setupGameWebSocket } = require('./websocket/gameServer');
 const { setupChatWebSocket } = require('./websocket/chatServer');
+const { seedDatabase } = require('./seed');
 
 const app = express();
 const server = http.createServer(app);
@@ -97,6 +98,7 @@ app.use((err, req, res, next) => {
 
 async function startServer() {
   await initializeDatabase();
+  await seedDatabase();
   
   const wss = new WebSocketServer({ server, path: '/ws/game' });
   const chatWss = new WebSocketServer({ server, path: '/ws/chat' });
