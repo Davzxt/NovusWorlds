@@ -1,0 +1,8 @@
+node_modules/
+novus.sqlite
+novus.sqlite-shm
+novus.sqlite-wal
+.env
+npm-debug.log*
+public/uploads/catalog/*
+!public/uploads/catalog/.gitkeep
