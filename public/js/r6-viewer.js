@@ -3,6 +3,7 @@ import { GLTFLoader } from '/vendor/three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from '/vendor/three/examples/jsm/controls/OrbitControls.js';
 
 export const loader = new GLTFLoader();
+const HAT_ANCHOR = Object.freeze({ x: 0, y: 3.38, z: 0 });
 
 export function createR6Viewer(container, options = {}) {
   const scene = new THREE.Scene();
@@ -92,7 +93,7 @@ export function applyHats(root, avatarData = {}) {
   for (const old of [...root.children].filter(c => c.name === 'novus_hat')) old.removeFromParent();
   for (const item of (avatarData.equippedItems || []).filter(i => i.type === 'hat').slice(0, 3)) {
     const t = item.hat_transform || {};
-    const p = t.position || { x: 0, y: 2.85, z: 0 };
+    const p = normalizeHatPosition(t.position);
     const r = t.rotation || { x: 0, y: 0, z: 0 };
     const s = t.scale || { x: 1, y: 1, z: 1 };
     const brim = new THREE.Mesh(new THREE.BoxGeometry(1.25, .18, 1.25), new THREE.MeshStandardMaterial({ color: '#111111' }));
@@ -106,6 +107,13 @@ export function applyHats(root, avatarData = {}) {
     hat.scale.set(s.x || 1, s.y || 1, s.z || 1);
     root.add(hat);
   }
+}
+
+function normalizeHatPosition(pos = {}) {
+  const x = Number(pos.x || 0);
+  const y = Number(pos.y || HAT_ANCHOR.y);
+  const z = Number(pos.z || 0);
+  return { x, y: y < 3.05 ? HAT_ANCHOR.y : y, z };
 }
 
 export function createFaceOverlay(avatarData = {}, gltfRig = false) {

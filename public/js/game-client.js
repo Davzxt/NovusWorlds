@@ -142,11 +142,11 @@ function moveAndCollide(dt) {
   if (isMoving) {
     input.normalize();
     const camForward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-    const camRight = new THREE.Vector3(-camForward.z, 0, camForward.x);
+    const camRight = new THREE.Vector3(camForward.z, 0, -camForward.x);
     const dir = new THREE.Vector3().addScaledVector(camRight, input.x).addScaledVector(camForward, input.z).normalize();
     tryHorizontalMove(dir.x * (run ? settings.runSpeed : settings.walkSpeed) * dt, 0);
     tryHorizontalMove(0, dir.z * (run ? settings.runSpeed : settings.walkSpeed) * dt);
-    local.rotation.y = Math.atan2(dir.x, dir.z);
+    local.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
   }
   velocityY -= 28 * dt;
   if ((keys[' '] || touchJump) && grounded) {
@@ -279,7 +279,7 @@ function getAnimation() {
   if (moving()) return keys.shift && settings.shiftToRun ? 'run' : 'walk';
   return 'idle';
 }
-function moving() { return keys.w || keys.a || keys.s || keys.d; }
+function moving() { return keys.w || keys.a || keys.s || keys.d || touchVector.lengthSq() > 0.01; }
 function isClimbing() {
   if (!moving() || grounded) return false;
   return colliders.some(c => Math.abs(local.position.x - c.position.x) < c.userData.half.x + .5 && Math.abs(local.position.z - c.position.z) < c.userData.half.z + .5 && c.userData.half.y > 1.4);

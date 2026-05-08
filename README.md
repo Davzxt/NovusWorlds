@@ -28,7 +28,11 @@ Conta admin criada automaticamente:
    - Environment: `Node`
 5. Adicione a variavel:
    - `SESSION_SECRET`: uma string longa e secreta.
-6. Deploy.
+   - `DATABASE_PATH`: `/var/data/novus.sqlite` se usar Render Disk.
+6. Para nao perder contas, jogos, visitas e inventario em redeploy, crie um **Persistent Disk** no Render:
+   - Mount Path: `/var/data`
+   - Size: o menor disponivel ja serve para comecar.
+7. Deploy.
 
 Render usa a variavel `PORT` automaticamente; o servidor ja respeita `process.env.PORT`.
 
@@ -37,7 +41,7 @@ Render usa a variavel `PORT` automaticamente; o servidor ja respeita `process.en
 Render suporta WebSockets em Web Services, mas o plano gratuito tem limites importantes:
 
 - O servico pode dormir depois de 15 minutos sem requests HTTP ou mensagens WebSocket.
-- O filesystem local e efemero. SQLite local e uploads locais podem ser perdidos em restart, redeploy ou spin down.
+- O filesystem local sem Persistent Disk e efemero. SQLite local e uploads locais podem ser perdidos em restart, redeploy ou spin down.
 - Free nao escala alem de uma instancia.
 - Muitos WebSockets consomem CPU, RAM e banda.
 
@@ -68,3 +72,7 @@ Object Storage externo
 ```
 
 No plano gratuito, trate como alpha publico, nao como producao massiva.
+
+## Persistencia no Render
+
+Se voce nao configurar `DATABASE_PATH=/var/data/novus.sqlite` e um Persistent Disk montado em `/var/data`, o banco volta a nascer do zero em redeploy. Isso apaga contas, jogos, visitas, inventario e sessoes. Com Disk persistente, o SQLite fica salvo fora do pacote do deploy.
