@@ -39,6 +39,21 @@ function migrate() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS game_votes (
+      user_id INTEGER REFERENCES users(id),
+      game_id INTEGER REFERENCES games(id),
+      value INTEGER NOT NULL CHECK(value IN (-1, 1)),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, game_id)
+    );
+    CREATE TABLE IF NOT EXISTS game_visits (
+      user_id INTEGER,
+      guest_key TEXT,
+      game_id INTEGER REFERENCES games(id),
+      first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, game_id),
+      UNIQUE(guest_key, game_id)
+    );
     CREATE TABLE IF NOT EXISTS catalog_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -178,6 +193,17 @@ function seed() {
       '{"position":{"x":0,"y":2.85,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1}}', 1
     WHERE NOT EXISTS (SELECT 1 FROM catalog_items WHERE name = 'Classic Visor')
   `).run(adminId);
+  for (const face of [
+    ['Classic Smile', 'Rosto classico sorridente.', 'face-smile'],
+    ['Serious Face', 'Rosto serio retro.', 'face-serious'],
+    ['Chill Face', 'Rosto tranquilo.', 'face-chill']
+  ]) {
+    db.prepare(`
+      INSERT INTO catalog_items (name, description, type, price, creator_id, asset_url, thumbnail_url, is_active)
+      SELECT ?, ?, 'face', 0, ?, ?, '/assets/textures/item-default.svg', 1
+      WHERE NOT EXISTS (SELECT 1 FROM catalog_items WHERE name = ?)
+    `).run(face[0], face[1], adminId, face[2], face[0]);
+  }
   db.prepare('INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)').run('platform_name', 'Novus Worlds');
   db.prepare('INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)').run('register_bonus', '100');
 }

@@ -67,6 +67,15 @@ export function blockR6(avatarData = {}) {
   part('left_arm', [.45, 1.1, .5], [-.75, 1.55, 0], colors.arms || '#f5cd30');
   part('right_arm', [.45, 1.1, .5], [.75, 1.55, 0], colors.arms || '#f5cd30');
   part('head', [.9, .9, .9], [0, 2.55, 0], colors.head || '#f5cd30');
+  const face = new THREE.Group();
+  const eyeMat = new THREE.MeshBasicMaterial({ color: '#111111' });
+  const mouthMat = new THREE.MeshBasicMaterial({ color: avatarData.face === 'Serious Face' ? '#333333' : '#8b1a1a' });
+  const eye1 = new THREE.Mesh(new THREE.BoxGeometry(.08, .08, .02), eyeMat);
+  const eye2 = eye1.clone();
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(avatarData.face === 'Chill Face' ? .34 : .28, .05, .02), mouthMat);
+  eye1.position.set(-.18, 2.62, -.46); eye2.position.set(.18, 2.62, -.46); mouth.position.set(0, avatarData.face === 'Serious Face' ? 2.42 : 2.38, -.46);
+  face.add(eye1, eye2, mouth);
+  group.add(face);
   return group;
 }
 

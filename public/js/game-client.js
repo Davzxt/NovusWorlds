@@ -7,6 +7,7 @@ const id = new URLSearchParams(location.search).get('id') || '1';
 const { game } = await api('/api/games/' + id);
 const user = await currentUser() || { id: Math.random().toString(36).slice(2), username: 'Guest', avatar_data: {} };
 const settings = loadSettings();
+const guestKey = getGuestKey();
 
 document.getElementById('gameTitle').textContent = game.title;
 
@@ -39,7 +40,7 @@ addClassicSkyline();
 const keys = {};
 let yaw = Math.PI;
 let pitch = -0.18;
-let cameraDistance = settings.cameraDistance;
+let cameraDistance = 9;
 let rightMouse = false;
 let velocityY = 0;
 let grounded = false;
@@ -61,12 +62,10 @@ addEventListener('mousemove', (e) => {
 });
 addEventListener('wheel', (e) => {
   cameraDistance = THREE.MathUtils.clamp(cameraDistance + Math.sign(e.deltaY) * 0.8, 5, 22);
-  settings.cameraDistance = cameraDistance;
-  saveSettings();
 });
 
 const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/game/${id}`);
-ws.onopen = () => ws.send(JSON.stringify({ type: 'join', gameId: id, userId: user.id, username: user.username, avatarData: user.avatar_data, position: packVec(local.position) }));
+ws.onopen = () => ws.send(JSON.stringify({ type: 'join', gameId: id, userId: user.id, guestKey, username: user.username, avatarData: user.avatar_data, position: packVec(local.position) }));
 ws.onmessage = (ev) => {
   const data = JSON.parse(ev.data);
   if (data.type === 'world_state') syncPlayers(data.players);
@@ -140,33 +139,33 @@ async function createCharacter(avatarData, isLocal = false) {
 }
 
 function animateR6(group, name, t) {
-  const meshes = [];
-  group.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const meshes = group.children[0]?.children?.length ? group.children[0].children : [];
   const swing = name === 'idle' ? Math.sin(t * 2) * 0.02 : Math.sin(t * (name === 'run' ? 12 : 8)) * 0.22;
   meshes.forEach((m) => {
-    if (m.position.x > 0.45) m.rotation.x = swing;
-    if (m.position.x < -0.45) m.rotation.x = -swing;
-    if (m.position.y < 0.9 && m.position.x > 0) m.rotation.x = -swing;
-    if (m.position.y < 0.9 && m.position.x < 0) m.rotation.x = swing;
+    const x = m.position?.x || 0;
+    const y = m.position?.y || 0;
+    if (y > 1.8) return;
+    if (Math.abs(x) > 0.55 && y > 0.8) m.rotation.x = x > 0 ? -swing : swing;
+    if (y < 0.8) m.rotation.x = x > 0 ? swing : -swing;
   });
-  group.position.y += Math.sin(t * 2) * 0.002;
 }
 
 function moveAndCollide(dt) {
-  const input = new THREE.Vector3((keys.d ? 1 : 0) - (keys.a ? 1 : 0), 0, (keys.s ? 1 : 0) - (keys.w ? 1 : 0));
+  const touch = getTouchMove();
+  const input = touch.lengthSq() ? touch : new THREE.Vector3((keys.d ? 1 : 0) - (keys.a ? 1 : 0), 0, (keys.w ? 1 : 0) - (keys.s ? 1 : 0));
   const isMoving = input.lengthSq() > 0;
   const run = keys.shift && settings.shiftToRun;
   if (isMoving) {
     input.normalize();
     const camForward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     const camRight = new THREE.Vector3(camForward.z, 0, -camForward.x);
-    const dir = new THREE.Vector3().addScaledVector(camRight, input.x).addScaledVector(camForward, -input.z).normalize();
+    const dir = new THREE.Vector3().addScaledVector(camRight, input.x).addScaledVector(camForward, input.z).normalize();
     tryHorizontalMove(dir.x * (run ? settings.runSpeed : settings.walkSpeed) * dt, 0);
     tryHorizontalMove(0, dir.z * (run ? settings.runSpeed : settings.walkSpeed) * dt);
     local.rotation.y = Math.atan2(dir.x, dir.z);
   }
-  velocityY -= settings.gravity * dt;
-  if (keys[' '] && grounded) {
+  velocityY -= 28 * dt;
+  if ((keys[' '] || touchJump) && grounded) {
     velocityY = settings.jumpPower;
     grounded = false;
   }
@@ -329,11 +328,9 @@ addEventListener('resize', () => {
 function loadSettings() {
   return {
     mouseSensitivity: 0.004,
-    cameraDistance: 9,
     walkSpeed: 7.5,
     runSpeed: 12,
     jumpPower: 11,
-    gravity: 28,
     fov: 70,
     shiftToRun: true,
     graphics: 'high',
@@ -348,8 +345,46 @@ function bindSettings() {
     input.type === 'checkbox' ? input.checked = !!settings[key] : input.value = settings[key];
     input.addEventListener('input', () => {
       settings[key] = input.type === 'checkbox' ? input.checked : Number(input.value);
-      cameraDistance = settings.cameraDistance;
       saveSettings();
     });
   }
 }
+
+function getGuestKey() {
+  let key = localStorage.getItem('novusGuestKey');
+  if (!key) {
+    key = crypto.randomUUID();
+    localStorage.setItem('novusGuestKey', key);
+  }
+  return key;
+}
+
+let touchVector = new THREE.Vector3();
+let touchJump = false;
+function getTouchMove() { return touchVector.clone(); }
+function setupMobileControls() {
+  if (!matchMedia('(pointer: coarse), (max-width: 780px)').matches) return;
+  document.body.classList.add('mobile-client');
+  const pad = document.createElement('div');
+  pad.className = 'mobile-pad';
+  pad.innerHTML = '<div class="stick"></div>';
+  const jump = document.createElement('button');
+  jump.className = 'mobile-jump';
+  jump.textContent = 'Pular';
+  document.querySelector('.hud').append(pad, jump);
+  const stick = pad.querySelector('.stick');
+  let active = null, origin = null;
+  pad.addEventListener('touchstart', (e) => { const t = e.changedTouches[0]; active = t.identifier; origin = { x: t.clientX, y: t.clientY }; }, { passive: true });
+  pad.addEventListener('touchmove', (e) => {
+    const t = [...e.changedTouches].find((x) => x.identifier === active);
+    if (!t || !origin) return;
+    const dx = THREE.MathUtils.clamp((t.clientX - origin.x) / 45, -1, 1);
+    const dy = THREE.MathUtils.clamp((t.clientY - origin.y) / 45, -1, 1);
+    touchVector.set(dx, 0, -dy);
+    stick.style.transform = `translate(${dx * 34}px, ${dy * 34}px)`;
+  }, { passive: true });
+  pad.addEventListener('touchend', () => { active = null; origin = null; touchVector.set(0,0,0); stick.style.transform = 'translate(0,0)'; }, { passive: true });
+  jump.addEventListener('touchstart', () => touchJump = true, { passive: true });
+  jump.addEventListener('touchend', () => touchJump = false, { passive: true });
+}
+setupMobileControls();

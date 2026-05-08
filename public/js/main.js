@@ -25,7 +25,7 @@ export async function renderHeader() {
     <div class="topbar"><div class="wrap nav">
       <a class="logo" href="/">Novus Worlds</a>
       <div class="links"><a href="/">Inicio</a><a href="/games.html">Jogos</a><a href="/catalog.html">Catalogo</a><a href="/forum.html">Forum</a><a href="/about.html">Sobre</a></div>
-      <div class="userbox">${user ? `<span class="novux">N$ ${user.novux}</span><a class="btn secondary" href="/profile.html?user=${encodeURIComponent(user.username)}">${user.username}</a><a class="btn" href="/studio.html">Studio</a>${user.is_admin ? '<a class="btn secondary" href="/admin/index.html">Admin</a>' : ''}<button id="logoutBtn" class="danger">Sair</button>` : '<a class="btn secondary" href="/login.html">Entrar</a><a class="btn" href="/register.html">Registrar</a>'}</div>
+      <div class="userbox">${user ? `<span class="novux">N$ ${user.novux}</span><a class="btn secondary" href="/profile.html?user=${encodeURIComponent(user.username)}">${user.username}</a><a class="btn" href="/studio-dashboard.html">Studio</a>${user.is_admin ? '<a class="btn secondary" href="/admin/index.html">Admin</a>' : ''}<button id="logoutBtn" class="danger">Sair</button>` : '<a class="btn secondary" href="/login.html">Entrar</a><a class="btn" href="/register.html">Registrar</a>'}</div>
     </div></div>`;
   document.getElementById('logoutBtn')?.addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST' }); location.href = '/'; });
 }
@@ -44,7 +44,7 @@ export async function loadCards() {
 }
 
 export function gameCard(g) {
-  return `<div class="card"><div class="thumb"><img src="${g.thumbnail_url || '/assets/textures/game-default.svg'}" alt=""></div><h3>${esc(g.title)}</h3><p class="muted">Criador: ${esc(g.creator || 'NovusWorlds')}</p><p>${g.visit_count || 0} visitas</p><a class="btn" href="/game.html?id=${g.id}">Jogar</a></div>`;
+  return `<div class="card"><div class="thumb"><img src="${g.thumbnail_url || '/assets/textures/game-default.svg'}" alt=""></div><h3>${esc(g.title)}</h3><p class="muted">Criador: ${esc(g.creator || 'NovusWorlds')}</p><p>${g.visit_count || 0} visitas</p><a class="btn secondary" href="/game-info.html?id=${g.id}">Detalhes</a> <a class="btn" href="/game.html?id=${g.id}">Jogar</a></div>`;
 }
 
 export function itemCard(i) {

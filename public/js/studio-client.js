@@ -26,6 +26,7 @@ const spawnPoints = [];
 let selected = null;
 let gameId = new URLSearchParams(location.search).get('id');
 let savedTitle = 'Novo Mundo';
+let selectedScriptId = null;
 
 if (gameId) await loadGame(gameId); else createDefaultWorld();
 
@@ -73,12 +74,14 @@ function addSpawn(pos = { x: 0, y: 3, z: 0 }, selectIt = true) {
 }
 
 function addScript(data = {}, selectIt = true) {
-  const script = { id: data.id || crypto.randomUUID(), name: data.name || 'Script', source: data.source || defaultLuau() };
+  const script = { id: data.id || crypto.randomUUID(), parentId: data.parentId || null, name: data.name || 'Script', source: data.source || defaultLuau() };
   scripts.push(script);
   if (selectIt) {
     selected = { userData: { editorType: 'script', ...script } };
+    selectedScriptId = script.id;
     transform.detach();
     renderProps();
+    syncCentralScript();
   }
   refreshExplorer();
 }
@@ -135,15 +138,27 @@ function renderProps() {
   if (!selected) { p.innerHTML = 'Selecione um objeto'; return; }
   const d = selected.userData;
   if (d.editorType === 'script') {
-    p.innerHTML = `<label>Nome<input id="pname" value="${d.name}"></label><label>Luau Script<textarea id="psource" rows="18">${d.source}</textarea></label><p class="muted">API: game.players, game.workspace, game.on(event, fn), player:teleport(x,y,z)</p>`;
+    p.innerHTML = `<label>Nome<input id="pname" value="${d.name}"></label><label>Parent<select id="pparent"><option value="">Workspace</option>${objects.map(o=>`<option value="${o.userData.id}" ${d.parentId===o.userData.id?'selected':''}>${o.userData.name}</option>`).join('')}</select></label><label>Luau Script<textarea id="psource" rows="18" list="luauHelp">${d.source}</textarea></label><div class="script-help"><button data-snippet="join">playerJoin</button><button data-snippet="touch">partTouched</button><button data-snippet="teleport">teleport</button></div><p class="muted">API: game.players, game.workspace, game.on(event, fn), player:teleport(x,y,z), player:setHealth(hp), player:addScore(n)</p>`;
     psource.oninput = () => {
       const s = scripts.find(x => x.id === d.id);
       s.source = psource.value; d.source = psource.value;
+      if (selectedScriptId === s.id) centralScript.value = s.source;
     };
     pname.oninput = () => { const s = scripts.find(x => x.id === d.id); s.name = pname.value; d.name = pname.value; refreshExplorer(); };
+    pparent.oninput = () => { const s = scripts.find(x => x.id === d.id); s.parentId = pparent.value || null; d.parentId = s.parentId; refreshExplorer(); };
+    p.querySelector('.script-help').onclick = (e) => {
+      const snips = {
+        join: 'game.on("playerJoin", function(player)\\n  player:setHealth(100)\\nend)\\n',
+        touch: 'game.on("partTouched", function(player)\\n  player:addScore(1)\\nend)\\n',
+        teleport: 'player:teleport(0, 5, 0)'
+      };
+      if (e.target.dataset.snippet) psource.setRangeText(snips[e.target.dataset.snippet], psource.selectionStart, psource.selectionEnd, 'end');
+      psource.dispatchEvent(new Event('input'));
+    };
     return;
   }
   p.innerHTML = `<label>Nome<input id="pname" value="${d.name}"></label>
+    <label>Parent<select id="pparent"><option value="">Workspace</option>${objects.filter(o=>o!==selected).map(o=>`<option value="${o.userData.id}" ${d.parentId===o.userData.id?'selected':''}>${o.userData.name}</option>`).join('')}</select></label>
     <label>Pos X<input id="px" type="number" step=".25" value="${selected.position.x.toFixed(2)}"></label>
     <label>Pos Y<input id="py" type="number" step=".25" value="${selected.position.y.toFixed(2)}"></label>
     <label>Pos Z<input id="pz" type="number" step=".25" value="${selected.position.z.toFixed(2)}"></label>
@@ -155,6 +170,7 @@ function renderProps() {
 function applyProps() {
   const d = selected.userData;
   d.name = pname.value;
+  d.parentId = pparent.value || null;
   selected.position.set(+px.value,+py.value,+pz.value);
   if (d.editorType === 'part') {
     d.size = { x:+sx.value, y:+sy.value, z:+sz.value };
@@ -175,7 +191,7 @@ function syncSelectedData() {
 function refreshExplorer() {
   document.getElementById('explorer').innerHTML = [
     '<b>Workspace</b>',
-    ...objects.map((o,i)=>`<div data-kind="part" data-i="${i}">${o.userData.name}</div>`),
+    ...objects.filter(o=>!o.userData.parentId).map((o)=>explorerPart(o, 0)).flat(),
     '<b>SpawnPoints</b>',
     ...spawnPoints.map((o,i)=>`<div data-kind="spawn" data-i="${i}">${o.userData.name}</div>`),
     '<b>Scripts</b>',
@@ -188,7 +204,7 @@ document.getElementById('explorer').onclick = e => {
   const i = Number(e.target.dataset.i);
   if (e.target.dataset.kind === 'part') select(objects[i]);
   if (e.target.dataset.kind === 'spawn') select(spawnPoints[i]);
-  if (e.target.dataset.kind === 'script') { selected = { userData: { editorType:'script', ...scripts[i] } }; transform.detach(); renderProps(); }
+  if (e.target.dataset.kind === 'script') { selectedScriptId = scripts[i].id; selected = { userData: { editorType:'script', ...scripts[i] } }; transform.detach(); renderProps(); syncCentralScript(); }
 };
 
 function mapData() {
@@ -205,7 +221,7 @@ function mapData() {
 }
 
 async function save(publish) {
-  const body = { title:document.getElementById('title').value || 'Novo Mundo', description:document.getElementById('description').value || 'Criado no Novus Studio', map_data:mapData(), thumbnail_url:renderer.domElement.toDataURL('image/png') };
+  const body = { title:document.getElementById('title').value || 'Novo Mundo', description:document.getElementById('description').value || 'Criado no Novus Studio', map_data:mapData(), thumbnail_url:renderer.domElement.toDataURL('image/png'), publish };
   if (gameId) await api('/api/games/'+gameId,{method:'PUT',body:JSON.stringify(body)});
   else { const r = await api('/api/games',{method:'POST',body:JSON.stringify(body)}); gameId = r.id; }
   log(publish ? 'Jogo publicado e salvo.' : 'Mapa salvo.');
@@ -215,6 +231,25 @@ async function save(publish) {
 document.getElementById('save').onclick = () => save(false);
 document.getElementById('publish').onclick = () => save(true);
 document.getElementById('test').onclick = async () => { if (!gameId) await save(false); open('/game.html?id='+gameId,'_blank'); };
+document.querySelectorAll('[data-tab]').forEach(btn => btn.onclick = () => {
+  const scriptMode = btn.dataset.tab === 'script';
+  document.getElementById('scriptWorkspace').classList.toggle('hidden', !scriptMode);
+  if (scriptMode && !selectedScriptId) {
+    if (!scripts.length) addScript();
+    selectedScriptId = scripts[0].id;
+  }
+  syncCentralScript();
+});
+centralScript.oninput = () => {
+  const s = scripts.find(x => x.id === selectedScriptId);
+  if (!s) return;
+  s.source = centralScript.value;
+  if (selected?.userData?.id === s.id) {
+    selected.userData.source = s.source;
+    const psource = document.getElementById('psource');
+    if (psource && psource.value !== s.source) psource.value = s.source;
+  }
+};
 
 function duplicateSelected() {
   const d = cleanPart(selected.userData);
@@ -230,11 +265,24 @@ function cleanPart(d) {
   const { editorType, ...rest } = d;
   return JSON.parse(JSON.stringify(rest));
 }
+function explorerPart(o, level) {
+  const i = objects.indexOf(o);
+  const rows = [`<div data-kind="part" data-i="${i}" style="padding-left:${level*14}px">${level ? '- ' : ''}${o.userData.name}</div>`];
+  for (const child of objects.filter(c => c.userData.parentId === o.userData.id)) rows.push(...explorerPart(child, level + 1));
+  for (const [si, script] of scripts.entries()) if (script.parentId === o.userData.id) rows.push(`<div data-kind="script" data-i="${si}" style="padding-left:${(level+1)*14}px">Script: ${script.name}</div>`);
+  return rows;
+}
 function newPart(type, name, size, color) {
   return { id:crypto.randomUUID(), type, name, position:{x:0,y:2,z:0}, rotation:{x:0,y:0,z:0}, size, color, material:'Plastic', anchored:true, canCollide:true, transparency:0, children:[] };
 }
 function defaultLuau() {
   return `-- Luau simplificado do Novus Worlds\n-- Exemplo:\ngame.on("playerJoin", function(player)\n  player:teleport(0, 5, 0)\nend)\n`;
+}
+function syncCentralScript() {
+  const s = scripts.find(x => x.id === selectedScriptId) || scripts[0];
+  if (!s) { centralScript.value = ''; return; }
+  selectedScriptId = s.id;
+  centralScript.value = s.source;
 }
 function log(msg) { document.querySelector('.output').textContent = 'Output: ' + msg; }
 function loop(){ requestAnimationFrame(loop); renderer.render(scene,camera); }

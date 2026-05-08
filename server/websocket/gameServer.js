@@ -23,13 +23,41 @@ function loadScripts(gameId) {
 }
 
 function runJoinScripts(room, player) {
-  for (const script of room.scripts) {
-    const source = String(script.source || '');
-    const teleport = source.match(/player:teleport\(([-\d.]+),\s*([-\d.]+),\s*([-\d.]+)\)/);
-    if (source.includes('playerJoin') && teleport) {
-      player.position = { x: Number(teleport[1]), y: Number(teleport[2]), z: Number(teleport[3]) };
-    }
+  const api = {
+    player: {
+      teleport: (x, y, z) => { player.position = { x: Number(x), y: Number(y), z: Number(z) }; },
+      setHealth: (hp) => { player.health = Math.max(0, Math.min(100, Number(hp))); },
+      addScore: (amount) => { player.score = (player.score || 0) + Number(amount || 0); }
+    },
+    game: { players: [...room.players.values()].map((p) => p.username), workspace: room.workspace || [] }
+  };
+  for (const script of room.scripts) executeLuauLike(script.source, 'playerJoin', api);
+}
+
+function executeLuauLike(source, eventName, api) {
+  const text = String(source || '').replace(/\r/g, '');
+  const block = text.match(new RegExp(`game\\.on\\(["']${eventName}["'],\\s*function\\(player\\)([\\s\\S]*?)end\\)`, 'm'));
+  if (!block) return;
+  const vars = new Map();
+  for (const raw of block[1].split('\n')) {
+    const line = raw.replace(/--.*$/, '').trim();
+    if (!line) continue;
+    const local = line.match(/^local\s+([A-Za-z_]\w*)\s*=\s*(.+)$/);
+    if (local) { vars.set(local[1], evalExpr(local[2], vars)); continue; }
+    const call = line.match(/^player:(teleport|setHealth|addScore)\((.*)\)$/);
+    if (call && api.player[call[1]]) api.player[call[1]](...splitArgs(call[2]).map((v) => evalExpr(v, vars)));
   }
+}
+
+function splitArgs(src) {
+  return String(src || '').split(',').map((v) => v.trim()).filter(Boolean);
+}
+
+function evalExpr(src, vars) {
+  const value = String(src || '').trim();
+  if (vars.has(value)) return vars.get(value);
+  if (/^[-\d.]+$/.test(value)) return Number(value);
+  return value.replace(/^["']|["']$/g, '');
 }
 
 function broadcast(room, data, except) {
@@ -68,7 +96,12 @@ function attachGameServer(server) {
         };
         runJoinScripts(room, self);
         room.players.set(self.id, self);
-        db.prepare('UPDATE games SET visit_count = visit_count + 1 WHERE id = ?').run(gameId);
+        const guestKey = data.guestKey ? String(data.guestKey).slice(0, 80) : null;
+        const userId = Number(data.userId) || null;
+        const inserted = userId
+          ? db.prepare('INSERT OR IGNORE INTO game_visits (user_id, game_id) VALUES (?, ?)').run(userId, gameId).changes
+          : db.prepare('INSERT OR IGNORE INTO game_visits (guest_key, game_id) VALUES (?, ?)').run(guestKey || cryptoRandom(), gameId).changes;
+        if (inserted) db.prepare('UPDATE games SET visit_count = visit_count + 1 WHERE id = ?').run(gameId);
         ws.send(JSON.stringify({ type: 'world_state', players: [...room.players.values()].map(packPlayer) }));
         broadcast(room, { type: 'player_join', player: packPlayer(self) }, ws);
       }
