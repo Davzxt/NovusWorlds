@@ -26,6 +26,8 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'novus-worlds-secret-key-20
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
@@ -33,7 +35,8 @@ app.use(session({
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 30,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production'
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax'
   }
 }));
 
@@ -47,8 +50,28 @@ app.use('/api/users', usersRoutes);
 app.use('/api/economy', economyRoutes);
 app.use('/api/admin', adminRoutes);
 
+app.get('/admin/catalog', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/admin/catalog.html'));
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+app.get('/profile', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/profile.html'));
+});
+
+app.get('/avatar', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/avatar.html'));
+});
+
+app.get('/studio', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/studio.html'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/admin/index.html'));
 });
 
 app.use((req, res) => {
