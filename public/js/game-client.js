@@ -336,7 +336,7 @@ function setupMobileControls() {
     if (!t || !origin) return;
     const dx = THREE.MathUtils.clamp((t.clientX - origin.x) / 45, -1, 1);
     const dy = THREE.MathUtils.clamp((t.clientY - origin.y) / 45, -1, 1);
-    touchVector.set(dx, 0, -dy);
+    touchVector.set(-dx, 0, -dy);
     stick.style.transform = `translate(${dx * 34}px, ${dy * 34}px)`;
   }, { passive: true });
   pad.addEventListener('touchend', () => { active = null; origin = null; touchVector.set(0,0,0); stick.style.transform = 'translate(0,0)'; }, { passive: true });
