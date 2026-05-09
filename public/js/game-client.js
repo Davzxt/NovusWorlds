@@ -62,8 +62,8 @@ let mobileCameraTouch = null;
 addEventListener('keydown', e => { if (document.activeElement !== document.getElementById('chatInput')) keys[e.key.toLowerCase()] = true; });
 addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('mousedown', e => { if (e.button === 2) rightMouse = true; });
-addEventListener('mouseup', e => { if (e.button === 2) rightMouse = false; });
+canvas.addEventListener('mousedown', e => { if (e.button === 0 || e.button === 2) rightMouse = true; });
+addEventListener('mouseup', () => { rightMouse = false; });
 addEventListener('mousemove', e => {
   if (!rightMouse) return;
   yaw -= e.movementX * .004;
@@ -153,7 +153,7 @@ function makeTexture(material, color) {
 }
 
 function updateLocal(dt, time) {
-  const input = touchVector.lengthSquared() > .01 ? touchVector.clone() : new B.Vector3((keys.a ? 1 : 0) - (keys.d ? 1 : 0), 0, (keys.w ? 1 : 0) - (keys.s ? 1 : 0));
+  const input = touchVector.lengthSquared() > .01 ? touchVector.clone() : new B.Vector3((keys.d ? 1 : 0) - (keys.a ? 1 : 0), 0, (keys.w ? 1 : 0) - (keys.s ? 1 : 0));
   if (input.lengthSquared() > 0) {
     input.normalize();
     const forward = new B.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
@@ -269,7 +269,7 @@ function setupMobileControls() {
   pad.addEventListener('touchmove', e => {
     const t = [...e.changedTouches].find(x => x.identifier === active); if (!t || !origin) return;
     const dx = B.Scalar.Clamp((t.clientX - origin.x) / 45, -1, 1), dy = B.Scalar.Clamp((t.clientY - origin.y) / 45, -1, 1);
-    touchVector.set(-dx, 0, -dy); stick.style.transform = `translate(${dx * 34}px, ${dy * 34}px)`;
+    touchVector.set(dx, 0, -dy); stick.style.transform = `translate(${dx * 34}px, ${dy * 34}px)`;
   }, { passive:true });
   pad.addEventListener('touchend', () => { active = null; origin = null; touchVector.set(0,0,0); stick.style.transform = 'translate(0,0)'; }, { passive:true });
   jump.addEventListener('touchstart', () => touchJump = true, { passive:true });

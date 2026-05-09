@@ -34,8 +34,10 @@ function renderForm() {
   `;
   form.querySelectorAll('[data-key]').forEach(btn => btn.onclick = () => { active = btn.dataset.key; renderForm(); });
   for (const name of ['speed', 'arm', 'leg', 'torso']) {
-    form[name].oninput = () => { form[`${name}Number`].value = form[name].value; presets[active][name] = Number(form[name].value); };
-    form[`${name}Number`].oninput = () => { form[name].value = form[`${name}Number`].value; presets[active][name] = Number(form[name].value); };
+    const slider = form.querySelector(`[name="${name}"]`);
+    const number = form.querySelector(`[name="${name}Number"]`);
+    slider.oninput = () => { number.value = slider.value; presets[active][name] = Number(slider.value); };
+    number.oninput = () => { slider.value = number.value; presets[active][name] = Number(number.value); };
   }
 }
 

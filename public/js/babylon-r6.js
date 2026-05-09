@@ -73,8 +73,9 @@ export async function addPreviewHat(root, scene, modelUrl, transform) {
   if (modelUrl) {
     try {
       const url = new URL(modelUrl, location.href);
-      const path = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1);
-      const file = url.pathname.slice(url.pathname.lastIndexOf('/') + 1);
+      const isBlob = url.protocol === 'blob:' || url.protocol === 'data:';
+      const path = isBlob ? '' : url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1);
+      const file = isBlob ? modelUrl : url.pathname.slice(url.pathname.lastIndexOf('/') + 1);
       const loaded = await B.SceneLoader.ImportMeshAsync('', path, file, scene);
       loaded.meshes.forEach(m => { if (m.geometry) m.parent = holder; });
     } catch {
@@ -96,10 +97,33 @@ function mapParts(root, model) {
     ['leftLeg', /left.*leg|leg.*left/i],
     ['rightLeg', /right.*leg|leg.*right/i]
   ];
-  const meshes = model.getChildMeshes();
+  const meshes = model.getChildMeshes().filter(m => m.geometry);
   for (const [key, rx] of names) {
     const mesh = meshes.find(m => rx.test(m.name));
     if (!mesh) continue;
+    const pivot = new B.TransformNode(key + 'Pivot', root.getScene());
+    pivot.parent = model;
+    pivot.position.copyFrom(mesh.position);
+    mesh.parent = pivot;
+    mesh.position.subtractInPlace(pivot.position);
+    root.parts[key] = pivot;
+  }
+  if (Object.keys(root.parts).length < 6 && meshes.length >= 6) {
+    const byY = [...meshes].sort((a, b) => a.position.y - b.position.y);
+    const legs = byY.slice(0, 2).sort((a, b) => a.position.x - b.position.x);
+    const mid = byY.slice(2, 5);
+    const arms = mid.filter(m => Math.abs(m.position.x) > .45).sort((a, b) => a.position.x - b.position.x);
+    const torso = mid.find(m => Math.abs(m.position.x) <= .45);
+    const head = byY[5];
+    assign('leftLeg', legs[0]);
+    assign('rightLeg', legs[1]);
+    assign('torso', torso);
+    assign('leftArm', arms[0]);
+    assign('rightArm', arms[1]);
+    assign('head', head);
+  }
+  function assign(key, mesh) {
+    if (!mesh || root.parts[key]) return;
     const pivot = new B.TransformNode(key + 'Pivot', root.getScene());
     pivot.parent = model;
     pivot.position.copyFrom(mesh.position);
