@@ -10,6 +10,8 @@
     "seed": "node server/db.js --seed"
   },
   "dependencies": {
+    "babylonjs": "^8.39.0",
+    "babylonjs-loaders": "^8.39.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.4.1",
     "express": "^4.19.2",

@@ -11,6 +11,8 @@ export function createR6Viewer(container, options = {}) {
   const camera = new THREE.PerspectiveCamera(45, container.clientWidth / Math.max(1, container.clientHeight), .1, 200);
   camera.position.set(4, 3.2, 6);
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.innerHTML = '';
   container.appendChild(renderer.domElement);
@@ -20,9 +22,12 @@ export function createR6Viewer(container, options = {}) {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x333333, 2));
   const dir = new THREE.DirectionalLight(0xffffff, 1.4);
   dir.position.set(5, 8, 4);
+  dir.castShadow = true;
+  dir.shadow.mapSize.set(1024, 1024);
   scene.add(dir);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(18, 18), new THREE.MeshStandardMaterial({ color: '#999999' }));
   floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
   scene.add(floor);
   const avatar = new THREE.Group();
   scene.add(avatar);
@@ -33,6 +38,7 @@ export function createR6Viewer(container, options = {}) {
     applyHats(avatar, options.avatar);
   }, undefined, () => avatar.add(blockR6(options.avatar)));
   let hat = null;
+  let previewModelUrl = null;
   function setHatTransform(t = {}) {
     if (!hat) {
       hat = new THREE.Mesh(new THREE.BoxGeometry(1.2, .28, 1.2), new THREE.MeshStandardMaterial({ color: '#111111' }));
@@ -42,6 +48,28 @@ export function createR6Viewer(container, options = {}) {
     hat.position.set(p.x, p.y, p.z);
     hat.rotation.set(THREE.MathUtils.degToRad(r.x || 0), THREE.MathUtils.degToRad(r.y || 0), THREE.MathUtils.degToRad(r.z || 0));
     hat.scale.set(s.x || 1, s.y || 1, s.z || 1);
+  }
+  async function setHatModelUrl(url) {
+    previewModelUrl = url;
+    if (hat) hat.removeFromParent();
+    hat = new THREE.Group();
+    hat.name = 'novus_hat_preview';
+    avatar.add(hat);
+    if (url) {
+      try {
+        const gltf = await loader.loadAsync(url);
+        gltf.scene.traverse(obj => { if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; } });
+        hat.add(gltf.scene);
+      } catch {
+        hat.add(new THREE.Mesh(new THREE.BoxGeometry(1.2, .28, 1.2), new THREE.MeshStandardMaterial({ color: '#111111' })));
+      }
+    } else {
+      hat.add(new THREE.Mesh(new THREE.BoxGeometry(1.2, .28, 1.2), new THREE.MeshStandardMaterial({ color: '#111111' })));
+    }
+  }
+  function setFaceTexture(dataUrl) {
+    for (const old of [...avatar.children].filter(c => c.name === 'face_overlay')) old.removeFromParent();
+    avatar.add(createPixelFaceOverlay(dataUrl, true));
   }
   if (options.item?.type === 'hat') setHatTransform(options.item.hat_transform || JSON.parse(options.item.hat_transform || '{}'));
   function animate() {
@@ -56,7 +84,7 @@ export function createR6Viewer(container, options = {}) {
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
   });
-  return { scene, camera, renderer, avatar, setHatTransform };
+  return { scene, camera, renderer, avatar, setHatTransform, setHatModelUrl, setFaceTexture };
 }
 
 export function blockR6(avatarData = {}) {
@@ -106,6 +134,13 @@ export function applyHats(root, avatarData = {}) {
     hat.rotation.set(THREE.MathUtils.degToRad(r.x || 0), THREE.MathUtils.degToRad(r.y || 0), THREE.MathUtils.degToRad(r.z || 0));
     hat.scale.set(s.x || 1, s.y || 1, s.z || 1);
     root.add(hat);
+    if (item.model_url) {
+      loader.load(item.model_url, gltf => {
+        hat.clear();
+        gltf.scene.traverse(obj => { if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; } });
+        hat.add(gltf.scene);
+      });
+    }
   }
 }
 
@@ -117,6 +152,8 @@ function normalizeHatPosition(pos = {}) {
 }
 
 export function createFaceOverlay(avatarData = {}, gltfRig = false) {
+  const faceItem = (avatarData.equippedItems || []).find(i => i.type === 'face' && i.asset_url?.startsWith('data:image'));
+  if (faceItem) return createPixelFaceOverlay(faceItem.asset_url, gltfRig);
   const face = new THREE.Group();
   const eyeMat = new THREE.MeshBasicMaterial({ color: '#111111' });
   const mouthMat = new THREE.MeshBasicMaterial({ color: avatarData.face === 'Serious Face' ? '#333333' : '#8b1a1a' });
@@ -128,6 +165,19 @@ export function createFaceOverlay(avatarData = {}, gltfRig = false) {
   const z = gltfRig ? -0.68 : -0.61;
   eye1.position.set(-.18, y, z); eye2.position.set(.18, y, z); mouth.position.set(0, mouthY, z);
   face.add(eye1, eye2, mouth);
+  face.name = 'face_overlay';
+  return face;
+}
+
+export function createPixelFaceOverlay(dataUrl, gltfRig = false) {
+  const face = new THREE.Group();
+  const texture = new THREE.TextureLoader().load(dataUrl);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(.82, .82), mat);
+  plane.position.set(0, gltfRig ? 2.93 : 2.55, gltfRig ? -0.69 : -0.61);
+  face.add(plane);
   face.name = 'face_overlay';
   return face;
 }

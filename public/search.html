@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pesquisa - Novus Worlds</title><link rel="stylesheet" href="/css/global.css"></head>
+<body><div data-header></div><main class="wrap"><section class="panel"><h1>Pesquisa</h1><label class="field"><span>Buscar usuarios</span><input id="q" placeholder="Username"></label><div id="results"></div></section></main><script type="module">import{api,esc}from'/js/main.js';const q=document.getElementById('q'),r=document.getElementById('results');async function search(){if(q.value.trim().length<2){r.innerHTML='';return}const data=await api('/api/users?q='+encodeURIComponent(q.value.trim()));r.innerHTML='<table class="table"><tr><th>Usuario</th><th>Status</th><th></th></tr>'+data.users.map(u=>`<tr><td>${esc(u.username)}</td><td>${u.last_login?'Online recente':'Offline'}</td><td><a class="btn secondary" href="/profile.html?user=${encodeURIComponent(u.username)}">Perfil</a></td></tr>`).join('')+'</table>'}q.oninput=()=>search().catch(()=>{});</script></body>
+</html>

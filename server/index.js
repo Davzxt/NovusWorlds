@@ -55,6 +55,8 @@ app.use('/admin', (req, res, next) => {
   next();
 });
 app.use('/vendor/three', express.static(path.join(__dirname, '..', 'node_modules', 'three')));
+app.use('/vendor/babylonjs', express.static(path.join(__dirname, '..', 'node_modules', 'babylonjs')));
+app.use('/vendor/babylonjs-loaders', express.static(path.join(__dirname, '..', 'node_modules', 'babylonjs-loaders')));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/api/auth', auth);
@@ -67,6 +69,14 @@ app.use('/api/economy', economy);
 app.use('/api/forum', forum);
 
 app.get('/health', (req, res) => res.json({ ok: true, name: 'Novus Worlds' }));
+app.get('/api/animation-presets', (req, res) => {
+  const rows = db.prepare('SELECT key, data FROM animation_presets').all();
+  const animations = {};
+  for (const row of rows) {
+    try { animations[row.key] = JSON.parse(row.data || '{}'); } catch { animations[row.key] = {}; }
+  }
+  res.json({ animations });
+});
 app.get('/admin', (req, res) => res.redirect('/admin/index.html'));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 

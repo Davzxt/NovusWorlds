@@ -1,5 +1,5 @@
 import { api, toast } from '../main.js';
-import { createR6Viewer } from '../r6-viewer.js';
+import { createBabylonR6Viewer } from '../babylon-r6-viewer.js';
 
 const table = document.getElementById('items');
 async function load() {
@@ -9,8 +9,37 @@ async function load() {
 table.onclick = async e => { if (!e.target.dataset.id) return; await api(`/api/admin/catalog/${e.target.dataset.id}/action`, { method:'POST', body:JSON.stringify({ action:e.target.dataset.action }) }); load(); };
 document.getElementById('openAdd').onclick = () => document.getElementById('modal').classList.remove('hidden');
 document.getElementById('cancel').onclick = () => document.getElementById('modal').classList.add('hidden');
-const viewer = createR6Viewer(document.getElementById('hatPreview'), { spin:false });
+const viewer = await createBabylonR6Viewer(document.getElementById('hatPreview'), { spin:false });
 const transform = { position:{x:0,y:3.38,z:0}, rotation:{x:0,y:0,z:0}, scale:{x:1,y:1,z:1} };
+const itemType = document.getElementById('itemType');
+const faceWrap = document.getElementById('faceEditorWrap');
+const faceCanvas = document.getElementById('faceCanvas');
+const faceCtx = faceCanvas.getContext('2d');
+faceCtx.imageSmoothingEnabled = false;
+faceCtx.clearRect(0, 0, 64, 64);
+function syncTypePanels() {
+  faceWrap.classList.toggle('hidden', itemType.value !== 'face');
+  document.getElementById('controls').classList.toggle('hidden', itemType.value !== 'hat');
+}
+itemType.onchange = syncTypePanels;
+document.getElementById('modelFile').onchange = e => {
+  const file = e.target.files?.[0];
+  if (!file) return viewer.setHatModelUrl(null);
+  viewer.setHatModelUrl(URL.createObjectURL(file)).then(() => viewer.setHatTransform(transform));
+};
+let drawing = false;
+function paintFace(e) {
+  const r = faceCanvas.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / r.width * 64);
+  const y = Math.floor((e.clientY - r.top) / r.height * 64);
+  faceCtx.fillStyle = document.getElementById('faceColor').value;
+  faceCtx.fillRect(x, y, 1, 1);
+  viewer.setFaceTexture(faceCanvas.toDataURL('image/png'));
+}
+faceCanvas.onpointerdown = e => { drawing = true; paintFace(e); };
+faceCanvas.onpointermove = e => { if (drawing) paintFace(e); };
+addEventListener('pointerup', () => drawing = false);
+document.getElementById('clearFace').onclick = () => { faceCtx.clearRect(0,0,64,64); viewer.setFaceTexture(faceCanvas.toDataURL('image/png')); };
 for (const input of document.querySelectorAll('[data-t]')) input.oninput = () => { const [group,key]=input.dataset.t.split('.'); transform[group][key]=Number(input.value); document.querySelector(`[data-n="${input.dataset.t}"]`).value=input.value; viewer.setHatTransform(transform); };
 for (const input of document.querySelectorAll('[data-n]')) input.oninput = () => { const slider=document.querySelector(`[data-t="${input.dataset.n}"]`); slider.value=input.value; slider.dispatchEvent(new Event('input')); };
 document.getElementById('fitHead').onclick=()=>{Object.assign(transform.position,{x:0,y:3.38,z:0});Object.assign(transform.rotation,{x:0,y:0,z:0});Object.assign(transform.scale,{x:1,y:1,z:1});syncControls();viewer.setHatTransform(transform)};
@@ -20,6 +49,7 @@ document.getElementById('addForm').onsubmit = async e => {
   e.preventDefault();
   const fd = new FormData(e.target);
   fd.set('hat_transform', JSON.stringify(transform));
+  if (itemType.value === 'face') fd.set('face_pixels', faceCanvas.toDataURL('image/png'));
   const res = await fetch('/api/admin/catalog/add', { method:'POST', body:fd });
   const data = await res.json();
   if (!res.ok) return toast(data.error || 'Erro ao salvar.');
@@ -27,4 +57,4 @@ document.getElementById('addForm').onsubmit = async e => {
   document.getElementById('modal').classList.add('hidden');
   load();
 };
-load(); syncControls(); viewer.setHatTransform(transform);
+load(); syncControls(); syncTypePanels(); viewer.setHatTransform(transform);

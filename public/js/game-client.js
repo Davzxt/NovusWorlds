@@ -1,167 +1,180 @@
-import * as THREE from '/vendor/three/build/three.module.js';
 import { api, currentUser, esc } from './main.js';
-import { createR6Avatar } from './r6-viewer.js';
+import { animateR6, createR6 } from './babylon-r6.js';
 
-const id = new URLSearchParams(location.search).get('id') || '1';
-const { game } = await api('/api/games/' + id);
-const user = await currentUser() || { id: Math.random().toString(36).slice(2), username: 'Guest', avatar_data: {} };
-const settings = { mouseSensitivity: 0.004, walkSpeed: 7.5, jumpPower: 11, fov: 70, graphics: 'high' };
+const B = window.BABYLON;
+if (!B) throw new Error('Babylon.js nao carregou.');
+
+const gameId = new URLSearchParams(location.search).get('id') || '1';
+const { game } = await api('/api/games/' + gameId);
+const animationConfig = (await api('/api/animation-presets').catch(() => ({ animations: {} }))).animations || {};
+const user = await currentUser() || { id: getGuestKey(), username: 'Guest', avatar_data: {} };
 const guestKey = getGuestKey();
 
 document.getElementById('gameTitle').textContent = game.title;
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(game.map_data.skyColor || '#87CEEB');
-scene.fog = new THREE.Fog(scene.background, 70, 180);
+const canvas = document.createElement('canvas');
+canvas.className = 'game-canvas';
+document.body.appendChild(canvas);
 
-const camera = new THREE.PerspectiveCamera(settings.fov, innerWidth / innerHeight, 0.1, 500);
-const renderer = new THREE.WebGLRenderer({ antialias: settings.graphics !== 'low' });
-renderer.setPixelRatio(settings.graphics === 'low' ? 1 : Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.domElement.className = 'game-canvas';
-document.body.appendChild(renderer.domElement);
+const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+const scene = new B.Scene(engine);
+scene.clearColor = B.Color4.FromHexString((game.map_data.skyColor || '#87CEEB') + 'ff');
+scene.fogMode = B.Scene.FOGMODE_LINEAR;
+scene.fogStart = 85;
+scene.fogEnd = 180;
+scene.fogColor = B.Color3.FromHexString(game.map_data.skyColor || '#87CEEB');
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x283344, 1.8));
-const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-sun.position.set(40, 70, 30);
-scene.add(sun);
+const camera = new B.FreeCamera('camera', new B.Vector3(0, 7, -12), scene);
+camera.minZ = .1;
+camera.fov = B.Tools.ToRadians(70);
+
+const hemi = new B.HemisphericLight('ambient2008', new B.Vector3(0, 1, 0), scene);
+hemi.intensity = .68;
+hemi.groundColor = new B.Color3(.22, .26, .32);
+const sun = new B.DirectionalLight('sun', new B.Vector3(-.45, -1, -.35), scene);
+sun.position.set(44, 72, 36);
+sun.intensity = 1.45;
+const shadow = new B.ShadowGenerator(2048, sun);
+shadow.usePercentageCloserFiltering = true;
+shadow.filteringQuality = B.ShadowGenerator.QUALITY_MEDIUM;
 
 const spawn = game.map_data.spawnPoints?.[0] || { x: 0, y: 3, z: 0 };
-const local = await createCharacter(user.avatar_data, true);
+const local = await createR6(scene, user.avatar_data, { scale: 1.35 });
 local.position.set(spawn.x, spawn.y, spawn.z);
-scene.add(local);
+local.getChildMeshes().forEach(m => shadow.addShadowCaster(m));
 
-const players = new Map();
 const colliders = [];
 for (const object of game.map_data.objects || []) addPart(object);
 
 const keys = {};
+const players = new Map();
 let yaw = Math.PI;
 let pitch = -0.18;
-let cameraDistance = 9;
+let distance = 9;
 let rightMouse = false;
 let velocityY = 0;
 let grounded = false;
 let lastSentChat = 0;
-let touchVector = new THREE.Vector3();
+let touchVector = new B.Vector3();
 let touchJump = false;
 let mobileCameraTouch = null;
 
-addEventListener('keydown', (e) => {
-  if (document.activeElement === document.getElementById('chatInput')) return;
-  keys[e.key.toLowerCase()] = true;
-});
-addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
-renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
-renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 2) rightMouse = true; });
-addEventListener('mouseup', (e) => { if (e.button === 2) rightMouse = false; });
-addEventListener('mousemove', (e) => {
+addEventListener('keydown', e => { if (document.activeElement !== document.getElementById('chatInput')) keys[e.key.toLowerCase()] = true; });
+addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('mousedown', e => { if (e.button === 2) rightMouse = true; });
+addEventListener('mouseup', e => { if (e.button === 2) rightMouse = false; });
+addEventListener('mousemove', e => {
   if (!rightMouse) return;
-  yaw -= e.movementX * settings.mouseSensitivity;
-  pitch = THREE.MathUtils.clamp(pitch - e.movementY * settings.mouseSensitivity, -1.1, 0.45);
+  yaw -= e.movementX * .004;
+  pitch = B.Scalar.Clamp(pitch - e.movementY * .004, -1.1, .45);
 });
-addEventListener('wheel', (e) => {
-  cameraDistance = THREE.MathUtils.clamp(cameraDistance + Math.sign(e.deltaY) * 0.8, 5, 22);
-});
+addEventListener('wheel', e => distance = B.Scalar.Clamp(distance + Math.sign(e.deltaY) * .8, 5, 22));
 
-const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/game/${id}`);
-ws.onopen = () => ws.send(JSON.stringify({ type: 'join', gameId: id, userId: user.id, guestKey, username: user.username, avatarData: user.avatar_data, position: packVec(local.position) }));
-ws.onmessage = (ev) => {
+const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/game/${gameId}`);
+ws.onopen = () => ws.send(JSON.stringify({ type: 'join', gameId, userId: user.id, guestKey, username: user.username, avatarData: user.avatar_data, position: vec(local.position) }));
+ws.onmessage = ev => {
   const data = JSON.parse(ev.data);
   if (data.type === 'world_state') syncPlayers(data.players);
-  if (data.type === 'player_leave') {
-    players.get(data.playerId)?.group.removeFromParent();
-    players.delete(data.playerId);
-  }
+  if (data.type === 'player_leave') { players.get(data.playerId)?.root.dispose(false, true); players.delete(data.playerId); }
   if (data.type === 'chat_broadcast') addChat(data);
 };
-
 setInterval(() => {
-  if (ws.readyState !== 1) return;
-  ws.send(JSON.stringify({ type: 'move', position: packVec(local.position), rotation: { x: 0, y: local.rotation.y, z: 0 }, animation: getAnimation() }));
+  if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'move', position: vec(local.position), rotation: { y: local.rotation.y }, animation: getAnimation() }));
 }, 80);
 
-document.getElementById('chatInput').addEventListener('keydown', (e) => {
+document.getElementById('chatInput').addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
-  const text = e.target.value.trim();
-  if (!text || Date.now() - lastSentChat < 450) return;
+  const message = e.target.value.trim();
+  if (!message || Date.now() - lastSentChat < 450) return;
   lastSentChat = Date.now();
-  ws.send(JSON.stringify({ type: 'chat', message: text }));
+  ws.send(JSON.stringify({ type: 'chat', message }));
   e.target.value = '';
 });
 document.getElementById('leaveBtn').onclick = () => location.href = '/games.html';
+
+let last = performance.now();
+engine.runRenderLoop(() => {
+  const now = performance.now();
+  const dt = Math.min(.04, (now - last) / 1000);
+  last = now;
+  updateLocal(dt, now / 1000);
+  updateCamera();
+  scene.render();
+  document.querySelector('.loading')?.remove();
+});
+addEventListener('resize', () => engine.resize());
+setupMobileControls();
+
 function addPart(o) {
-  const material = materialFor(o);
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.size.x, o.size.y, o.size.z), material);
+  const mesh = B.MeshBuilder.CreateBox(o.name || 'Part', { width: o.size.x, height: o.size.y, depth: o.size.z }, scene);
   mesh.position.set(o.position.x, o.position.y, o.position.z);
   mesh.rotation.set(o.rotation.x || 0, o.rotation.y || 0, o.rotation.z || 0);
-  mesh.userData = { ...o, half: { x: o.size.x / 2, y: o.size.y / 2, z: o.size.z / 2 } };
-  scene.add(mesh);
+  mesh.material = materialFor(o);
+  mesh.receiveShadows = true;
+  shadow.addShadowCaster(mesh);
+  mesh.metadata = { ...o, half: { x: o.size.x / 2, y: o.size.y / 2, z: o.size.z / 2 } };
   if (o.canCollide) colliders.push(mesh);
 }
 
 function materialFor(o) {
-  const roughness = o.material === 'Metal' ? 0.25 : 0.85;
-  const metalness = o.material === 'Metal' ? 0.55 : 0;
-  return new THREE.MeshStandardMaterial({ color: o.color, roughness, metalness, transparent: o.transparency > 0, opacity: 1 - (o.transparency || 0) });
+  const mat = new B.StandardMaterial((o.name || 'Part') + 'Mat', scene);
+  mat.diffuseColor = B.Color3.FromHexString(o.color || '#cccccc');
+  mat.specularColor = o.material === 'Metal' ? new B.Color3(.45, .45, .45) : new B.Color3(.08, .08, .08);
+  mat.roughness = o.material === 'Metal' ? .25 : .9;
+  mat.diffuseTexture = makeTexture(o.material || 'Plastic', o.color || '#cccccc');
+  mat.diffuseTexture.uScale = Math.max(1, o.size.x / 4);
+  mat.diffuseTexture.vScale = Math.max(1, o.size.z / 4);
+  if (o.transparency > 0) mat.alpha = 1 - o.transparency;
+  return mat;
 }
 
-async function createCharacter(avatarData, isLocal = false) {
-  const group = new THREE.Group();
-  group.userData.parts = {};
-  group.add(await createR6Avatar(avatarData));
-  const label = makeNameLabel(isLocal ? user.username : '');
-  label.position.y = 4.0;
-  group.add(label);
-  group.userData.label = label;
-  return group;
+function makeTexture(material, color) {
+  const tex = new B.DynamicTexture('tex' + Math.random(), { width: 128, height: 128 }, scene, false, B.Texture.NEAREST_SAMPLINGMODE);
+  const ctx = tex.getContext();
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 128, 128);
+  if (material === 'Grass') {
+    ctx.fillStyle = 'rgba(0,70,0,.35)';
+    for (let i = 0; i < 70; i++) ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 6);
+  } else if (material === 'Brick') {
+    ctx.strokeStyle = 'rgba(90,0,0,.35)';
+    for (let y = 0; y < 128; y += 32) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(128, y); ctx.stroke();
+      for (let x = (y / 32) % 2 ? 0 : 32; x < 128; x += 64) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 32); ctx.stroke(); }
+    }
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,.24)';
+    for (let x = 24; x < 128; x += 40) for (let y = 24; y < 128; y += 40) { ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill(); }
+  }
+  tex.update();
+  tex.wrapU = tex.wrapV = B.Texture.WRAP_ADDRESSMODE;
+  return tex;
 }
 
-function animateR6(group, name, t) {
-  const root = group.children[0]?.children?.find?.(c => c.type === 'Group') || group.children[0];
-  const parts = root?.children || [];
-  const speed = name === 'walk' ? 8 : name === 'climb' ? 10 : 2;
-  const swing = Math.sin(t * speed);
-  parts.forEach((m) => {
-    const x = m.position?.x || 0, y = m.position?.y || 0;
-    m.rotation.x *= 0.75;
-    m.rotation.z *= 0.75;
-    if (name === 'idle') { if (y > 1.8) m.rotation.y = Math.sin(t * 1.5) * 0.04; return; }
-    if (name === 'jump') { if (Math.abs(x) > .55 && y > .8) m.rotation.x = 0.45; if (y < .8) m.rotation.x = -0.25; return; }
-    if (name === 'climb') { if (Math.abs(x) > .55 || y < .8) m.rotation.x = -swing * 0.65; return; }
-    if (Math.abs(x) > .55 && y > .8) m.rotation.x = (x > 0 ? -swing : swing) * 0.42;
-    if (y < .8) m.rotation.x = (x > 0 ? swing : -swing) * 0.36;
-  });
-}
-
-function moveAndCollide(dt) {
-  const touch = getTouchMove();
-  const input = touch.lengthSq() ? touch : new THREE.Vector3((keys.a ? 1 : 0) - (keys.d ? 1 : 0), 0, (keys.w ? 1 : 0) - (keys.s ? 1 : 0));
-  const isMoving = input.lengthSq() > 0;
-  if (isMoving) {
+function updateLocal(dt, time) {
+  const input = touchVector.lengthSquared() > .01 ? touchVector.clone() : new B.Vector3((keys.a ? 1 : 0) - (keys.d ? 1 : 0), 0, (keys.w ? 1 : 0) - (keys.s ? 1 : 0));
+  if (input.lengthSquared() > 0) {
     input.normalize();
-    const camForward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-    const camRight = new THREE.Vector3(camForward.z, 0, -camForward.x);
-    const dir = new THREE.Vector3().addScaledVector(camRight, input.x).addScaledVector(camForward, input.z).normalize();
-    tryHorizontalMove(dir.x * settings.walkSpeed * dt, 0);
-    tryHorizontalMove(0, dir.z * settings.walkSpeed * dt);
+    const forward = new B.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const right = new B.Vector3(forward.z, 0, -forward.x);
+    const dir = right.scale(input.x).add(forward.scale(input.z)).normalize();
+    tryMove(dir.x * 7.5 * dt, 0);
+    tryMove(0, dir.z * 7.5 * dt);
     local.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
   }
   velocityY -= 28 * dt;
-  if ((keys[' '] || touchJump) && grounded) {
-    velocityY = settings.jumpPower;
-    grounded = false;
-  }
+  if ((keys[' '] || touchJump) && grounded) { velocityY = 11; grounded = false; }
   local.position.y += velocityY * dt;
   resolveVertical();
-  animateR6(local, getAnimation(), performance.now() / 1000);
+  animateR6(local, getAnimation(), time, animationConfig);
 }
 
-function tryHorizontalMove(dx, dz) {
+function tryMove(dx, dz) {
   local.position.x += dx;
   local.position.z += dz;
   for (const c of colliders) {
-    if (intersectsPlayer(c)) {
+    if (intersects(c)) {
       local.position.x -= dx;
       local.position.z -= dz;
       return;
@@ -172,61 +185,47 @@ function tryHorizontalMove(dx, dz) {
 function resolveVertical() {
   grounded = false;
   for (const c of colliders) {
-    const half = c.userData.half;
-    const withinX = Math.abs(local.position.x - c.position.x) < half.x + 0.42;
-    const withinZ = Math.abs(local.position.z - c.position.z) < half.z + 0.42;
-    const top = c.position.y + half.y;
-    const feet = local.position.y;
-    if (withinX && withinZ && feet <= top + 0.22 && feet >= top - 1.2 && velocityY <= 0) {
+    const h = c.metadata.half;
+    const top = c.position.y + h.y;
+    if (Math.abs(local.position.x - c.position.x) < h.x + .45 && Math.abs(local.position.z - c.position.z) < h.z + .45 && local.position.y <= top + .22 && local.position.y >= top - 1.2 && velocityY <= 0) {
       local.position.y = top;
       velocityY = 0;
       grounded = true;
     }
   }
-  if (local.position.y < -30) {
-    local.position.set(spawn.x, spawn.y, spawn.z);
-    velocityY = 0;
-  }
+  if (local.position.y < -30) { local.position.set(spawn.x, spawn.y, spawn.z); velocityY = 0; }
 }
 
-function intersectsPlayer(c) {
-  const h = c.userData.half;
-  const px = local.position.x, py = local.position.y + 1.6, pz = local.position.z;
-  return Math.abs(px - c.position.x) < h.x + 0.45 && Math.abs(py - c.position.y) < h.y + 1.55 && Math.abs(pz - c.position.z) < h.z + 0.45;
+function intersects(c) {
+  const h = c.metadata.half;
+  return Math.abs(local.position.x - c.position.x) < h.x + .45 && Math.abs(local.position.y + 1.5 - c.position.y) < h.y + 1.45 && Math.abs(local.position.z - c.position.z) < h.z + .45;
 }
 
 function updateCamera() {
-  camera.fov = settings.fov;
-  camera.updateProjectionMatrix();
-  const target = new THREE.Vector3(local.position.x, local.position.y + 2.0, local.position.z);
-  const offset = new THREE.Vector3(
-    Math.sin(yaw) * Math.cos(pitch) * cameraDistance,
-    2.2 + Math.sin(pitch) * cameraDistance,
-    Math.cos(yaw) * Math.cos(pitch) * cameraDistance
-  );
-  camera.position.lerp(target.clone().add(offset), 0.18);
-  camera.lookAt(target);
+  const target = local.position.add(new B.Vector3(0, 2, 0));
+  const offset = new B.Vector3(Math.sin(yaw) * Math.cos(pitch) * distance, 2.2 + Math.sin(pitch) * distance, Math.cos(yaw) * Math.cos(pitch) * distance);
+  camera.position = B.Vector3.Lerp(camera.position, target.add(offset), .18);
+  camera.setTarget(target);
 }
 
-function syncPlayers(list) {
+async function syncPlayers(list) {
   document.getElementById('onlineCount').textContent = list.length;
   for (const p of list) {
     if (String(p.id) === String(user.id)) continue;
     let entry = players.get(p.id);
     if (!entry) {
-      const group = new THREE.Group();
-      createR6Avatar(p.avatar).then(avatar => group.add(avatar)).catch(err => novusFatal?.(err));
-      group.userData.label = makeNameLabel(p.username);
-      group.userData.label.position.y = 4;
-      group.add(group.userData.label);
-      scene.add(group);
-      entry = { group, target: new THREE.Vector3() };
+      const root = await createR6(scene, p.avatar, { scale: 1.35 });
+      root.getChildMeshes().forEach(m => shadow.addShadowCaster(m));
+      const label = makeLabel(p.username);
+      label.parent = root;
+      label.position.y = 4;
+      entry = { root, target: new B.Vector3() };
       players.set(p.id, entry);
     }
     entry.target.set(p.position.x, p.position.y, p.position.z);
-    entry.group.position.lerp(entry.target, 0.35);
-    entry.group.rotation.y = p.rotation?.y || 0;
-    animateR6(entry.group, p.animation || 'idle', performance.now() / 1000);
+    entry.root.position = B.Vector3.Lerp(entry.root.position, entry.target, .35);
+    entry.root.rotation.y = p.rotation?.y || 0;
+    animateR6(entry.root, p.animation || 'idle', performance.now() / 1000, animationConfig);
   }
 }
 
@@ -234,129 +233,51 @@ function addChat(data) {
   const log = document.getElementById('gameChatLog');
   log.insertAdjacentHTML('beforeend', `<div><b>${esc(data.from)}:</b> ${esc(data.message)}</div>`);
   log.scrollTop = log.scrollHeight;
-  const target = String(data.playerId) === String(user.id) ? local : players.get(data.playerId)?.group;
-  if (target) showBubble(target, data.message);
 }
 
-function showBubble(group, text) {
-  group.userData.bubble?.removeFromParent();
-  const sprite = makeBubble(text);
-  sprite.position.y = 4.7;
-  group.add(sprite);
-  group.userData.bubble = sprite;
-  setTimeout(() => { if (group.userData.bubble === sprite) sprite.removeFromParent(); }, 5000);
-}
-
-function makeBubble(text) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512; canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#111111'; ctx.lineWidth = 6;
-  ctx.roundRect(10, 10, 492, 86, 16); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#111111'; ctx.font = 'bold 32px Verdana';
-  ctx.fillText(String(text).slice(0, 42), 28, 62);
-  const tex = new THREE.CanvasTexture(canvas);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
-  sprite.scale.set(4.2, 1.05, 1);
-  return sprite;
-}
-
-function makeNameLabel(text) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256; canvas.height = 64;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 8, 256, 42);
-  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 24px Verdana'; ctx.textAlign = 'center'; ctx.fillText(text, 128, 38);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
-  sprite.scale.set(2.6, 0.65, 1);
-  return sprite;
+function makeLabel(text) {
+  const tex = new B.DynamicTexture('label', { width: 256, height: 64 }, scene);
+  tex.drawText(text, null, 40, 'bold 24px Verdana', '#ffffff', 'rgba(0,0,0,.55)');
+  const mat = new B.StandardMaterial('labelMat', scene);
+  mat.diffuseTexture = tex;
+  mat.emissiveColor = B.Color3.White();
+  const plane = B.MeshBuilder.CreatePlane('label', { width: 2.6, height: .65 }, scene);
+  plane.billboardMode = B.Mesh.BILLBOARDMODE_ALL;
+  plane.material = mat;
+  return plane;
 }
 
 function getAnimation() {
   if (isClimbing()) return 'climb';
-  if (!grounded) return 'jump';
-  if (moving()) return 'walk';
-  return 'idle';
+  if (!grounded) return velocityY > 0 ? 'jump' : 'fall';
+  return moving() ? 'walk' : 'idle';
 }
-function moving() { return keys.w || keys.a || keys.s || keys.d || touchVector.lengthSq() > 0.01; }
-function isClimbing() {
-  if (!moving() || grounded) return false;
-  return colliders.some(c => Math.abs(local.position.x - c.position.x) < c.userData.half.x + .5 && Math.abs(local.position.z - c.position.z) < c.userData.half.z + .5 && c.userData.half.y > 1.4);
-}
-function packVec(v) { return { x: v.x, y: v.y, z: v.z }; }
+function moving() { return keys.w || keys.a || keys.s || keys.d || touchVector.lengthSquared() > .01; }
+function isClimbing() { return moving() && !grounded && colliders.some(c => Math.abs(local.position.x - c.position.x) < c.metadata.half.x + .5 && Math.abs(local.position.z - c.position.z) < c.metadata.half.z + .5 && c.metadata.half.y > 1.4); }
+function vec(v) { return { x: v.x, y: v.y, z: v.z }; }
+function getGuestKey() { let k = localStorage.getItem('novusGuestKey'); if (!k) { k = crypto.randomUUID?.() || `guest_${Date.now()}`; localStorage.setItem('novusGuestKey', k); } return k; }
 
-let last = performance.now();
-function tick(now = performance.now()) {
-  requestAnimationFrame(tick);
-  const dt = Math.min(0.04, (now - last) / 1000);
-  last = now;
-  moveAndCollide(dt);
-  updateCamera();
-  renderer.render(scene, camera);
-  document.querySelector('.loading')?.remove();
-}
-tick();
-
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-function getGuestKey() {
-  let key = localStorage.getItem('novusGuestKey');
-  if (!key) {
-    key = randomId();
-    localStorage.setItem('novusGuestKey', key);
-  }
-  return key;
-}
-
-function randomId() {
-  return globalThis.crypto?.randomUUID ? crypto.randomUUID() : `guest_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-function getTouchMove() { return touchVector.clone(); }
 function setupMobileControls() {
   if (!matchMedia('(pointer: coarse), (max-width: 780px)').matches) return;
   document.body.classList.add('mobile-client');
-  const pad = document.createElement('div');
-  pad.className = 'mobile-pad';
-  pad.innerHTML = '<div class="stick"></div>';
-  const jump = document.createElement('button');
-  jump.className = 'mobile-jump';
-  jump.textContent = 'Pular';
+  const pad = document.createElement('div'); pad.className = 'mobile-pad'; pad.innerHTML = '<div class="stick"></div>';
+  const jump = document.createElement('button'); jump.className = 'mobile-jump'; jump.textContent = 'Pular';
   document.querySelector('.hud').append(pad, jump);
   const stick = pad.querySelector('.stick');
   let active = null, origin = null;
-  pad.addEventListener('touchstart', (e) => { const t = e.changedTouches[0]; active = t.identifier; origin = { x: t.clientX, y: t.clientY }; }, { passive: true });
-  pad.addEventListener('touchmove', (e) => {
-    const t = [...e.changedTouches].find((x) => x.identifier === active);
-    if (!t || !origin) return;
-    const dx = THREE.MathUtils.clamp((t.clientX - origin.x) / 45, -1, 1);
-    const dy = THREE.MathUtils.clamp((t.clientY - origin.y) / 45, -1, 1);
-    touchVector.set(-dx, 0, -dy);
-    stick.style.transform = `translate(${dx * 34}px, ${dy * 34}px)`;
-  }, { passive: true });
-  pad.addEventListener('touchend', () => { active = null; origin = null; touchVector.set(0,0,0); stick.style.transform = 'translate(0,0)'; }, { passive: true });
-  jump.addEventListener('touchstart', () => touchJump = true, { passive: true });
-  jump.addEventListener('touchend', () => touchJump = false, { passive: true });
-  renderer.domElement.addEventListener('touchstart', (e) => {
-    for (const t of e.changedTouches) {
-      if (t.clientX > innerWidth * 0.42) mobileCameraTouch = { id: t.identifier, x: t.clientX, y: t.clientY };
-    }
-  }, { passive: true });
-  renderer.domElement.addEventListener('touchmove', (e) => {
-    if (!mobileCameraTouch) return;
-    const t = [...e.changedTouches].find(x => x.identifier === mobileCameraTouch.id);
-    if (!t) return;
-    yaw -= (t.clientX - mobileCameraTouch.x) * settings.mouseSensitivity;
-    pitch = THREE.MathUtils.clamp(pitch - (t.clientY - mobileCameraTouch.y) * settings.mouseSensitivity, -1.1, 0.45);
-    mobileCameraTouch.x = t.clientX;
-    mobileCameraTouch.y = t.clientY;
-  }, { passive: true });
-  renderer.domElement.addEventListener('touchend', (e) => {
-    if ([...e.changedTouches].some(x => x.identifier === mobileCameraTouch?.id)) mobileCameraTouch = null;
-  }, { passive: true });
+  pad.addEventListener('touchstart', e => { const t = e.changedTouches[0]; active = t.identifier; origin = { x:t.clientX, y:t.clientY }; }, { passive:true });
+  pad.addEventListener('touchmove', e => {
+    const t = [...e.changedTouches].find(x => x.identifier === active); if (!t || !origin) return;
+    const dx = B.Scalar.Clamp((t.clientX - origin.x) / 45, -1, 1), dy = B.Scalar.Clamp((t.clientY - origin.y) / 45, -1, 1);
+    touchVector.set(-dx, 0, -dy); stick.style.transform = `translate(${dx * 34}px, ${dy * 34}px)`;
+  }, { passive:true });
+  pad.addEventListener('touchend', () => { active = null; origin = null; touchVector.set(0,0,0); stick.style.transform = 'translate(0,0)'; }, { passive:true });
+  jump.addEventListener('touchstart', () => touchJump = true, { passive:true });
+  jump.addEventListener('touchend', () => touchJump = false, { passive:true });
+  canvas.addEventListener('touchstart', e => { for (const t of e.changedTouches) if (t.clientX > innerWidth * .42) mobileCameraTouch = { id:t.identifier, x:t.clientX, y:t.clientY }; }, { passive:true });
+  canvas.addEventListener('touchmove', e => {
+    if (!mobileCameraTouch) return; const t = [...e.changedTouches].find(x => x.identifier === mobileCameraTouch.id); if (!t) return;
+    yaw -= (t.clientX - mobileCameraTouch.x) * .004; pitch = B.Scalar.Clamp(pitch - (t.clientY - mobileCameraTouch.y) * .004, -1.1, .45); mobileCameraTouch.x = t.clientX; mobileCameraTouch.y = t.clientY;
+  }, { passive:true });
+  canvas.addEventListener('touchend', e => { if ([...e.changedTouches].some(x => x.identifier === mobileCameraTouch?.id)) mobileCameraTouch = null; }, { passive:true });
 }
-setupMobileControls();

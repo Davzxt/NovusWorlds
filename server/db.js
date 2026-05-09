@@ -153,6 +153,12 @@ function migrate() {
       body TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS animation_presets (
+      key TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      data TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
@@ -216,6 +222,16 @@ function seed() {
   }
   db.prepare('INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)').run('platform_name', 'Novus Worlds');
   db.prepare('INSERT OR IGNORE INTO platform_settings (key, value) VALUES (?, ?)').run('register_bonus', '100');
+  const animations = {
+    idle: { speed: 1.4, arm: 0.02, leg: 0.01, torso: 0.015 },
+    walk: { speed: 8, arm: 0.48, leg: 0.42, torso: 0.035 },
+    jump: { arm: 0.68, leg: -0.28, torso: -0.05 },
+    fall: { arm: 0.18, leg: 0.18, torso: 0.04 },
+    climb: { speed: 10, arm: 0.65, leg: 0.65, torso: 0.02 }
+  };
+  for (const [key, data] of Object.entries(animations)) {
+    db.prepare('INSERT OR IGNORE INTO animation_presets (key, name, data) VALUES (?, ?, ?)').run(key, key, JSON.stringify(data));
+  }
 }
 
 migrate();

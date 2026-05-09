@@ -78,8 +78,10 @@ router.post('/catalog/add', upload.fields([{ name: 'asset', maxCount: 1 }, { nam
   const name = String(req.body.name || '').trim().slice(0, 80);
   if (!name) return res.status(400).json({ error: 'Nome obrigatorio.' });
   const transform = req.body.hat_transform || '{"position":{"x":0,"y":3.38,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1}}';
+  const facePixels = type === 'face' && String(req.body.face_pixels || '').startsWith('data:image/png;base64,') ? String(req.body.face_pixels) : null;
+  const assetUrl = facePixels || asset;
   const info = db.prepare('INSERT INTO catalog_items (name, description, type, price, creator_id, asset_url, model_url, thumbnail_url, hat_transform, is_limited, limited_quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(name, String(req.body.description || '').slice(0, 500), type, Number(req.body.price || 0), req.session.user.id, asset, model, asset || '/assets/textures/item-default.svg', transform, req.body.is_limited ? 1 : 0, req.body.limited_quantity || null);
+    .run(name, String(req.body.description || '').slice(0, 500), type, Number(req.body.price || 0), req.session.user.id, assetUrl, model, assetUrl || '/assets/textures/item-default.svg', transform, req.body.is_limited ? 1 : 0, req.body.limited_quantity || null);
   db.prepare('INSERT INTO activity_log (type, message) VALUES (?, ?)').run('catalog', `Novo item: ${name}`);
   res.json({ ok: true, id: info.lastInsertRowid });
 });
@@ -99,6 +101,28 @@ router.post('/reports/:id/action', (req, res) => {
 router.get('/settings', (req, res) => res.json({ settings: db.prepare('SELECT * FROM platform_settings').all() }));
 router.post('/settings', (req, res) => {
   for (const [key, value] of Object.entries(req.body || {})) db.prepare('INSERT INTO platform_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(value));
+  res.json({ ok: true });
+});
+
+router.get('/animations', (req, res) => {
+  const rows = db.prepare('SELECT key, name, data, updated_at FROM animation_presets ORDER BY key').all();
+  res.json({ animations: rows.map(row => ({ ...row, data: JSON.parse(row.data || '{}') })) });
+});
+
+router.post('/animations/:key', (req, res) => {
+  const key = String(req.params.key || '').replace(/[^a-z_]/g, '');
+  if (!['idle', 'walk', 'jump', 'fall', 'climb'].includes(key)) return res.status(400).json({ error: 'Animacao invalida.' });
+  const data = {
+    speed: Number(req.body.speed || 1),
+    arm: Number(req.body.arm || 0),
+    leg: Number(req.body.leg || 0),
+    torso: Number(req.body.torso || 0)
+  };
+  db.prepare(`
+    INSERT INTO animation_presets (key, name, data, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP
+  `).run(key, key, JSON.stringify(data));
   res.json({ ok: true });
 });
 

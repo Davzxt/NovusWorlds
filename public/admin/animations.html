@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Animacoes Admin - Novus Worlds</title>
+  <link rel="stylesheet" href="/css/global.css">
+  <link rel="stylesheet" href="/css/admin.css">
+  <script src="/vendor/babylonjs/babylon.js"></script>
+  <script src="/vendor/babylonjs-loaders/babylonjs.loaders.min.js"></script>
+</head>
+<body class="admin-page">
+  <div class="admin-shell">
+    <nav class="admin-nav">
+      <h2>Novus Admin</h2>
+      <a href="/admin/index.html">Dashboard</a>
+      <a href="/admin/users.html">Usuarios</a>
+      <a href="/admin/games.html">Jogos</a>
+      <a href="/admin/catalog.html">Catalogo</a>
+      <a href="/admin/animations.html">Animacoes</a>
+      <a href="/admin/economy.html">Economia</a>
+      <a href="/admin/reports.html">Denuncias</a>
+      <a href="/admin/settings.html">Configuracoes</a>
+    </nav>
+    <main class="admin-main">
+      <h1>Animacoes R6</h1>
+      <section class="panel anim-layout">
+        <form id="animForm"></form>
+        <div id="animPreview"></div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="/js/admin/animations-admin.js"></script>
+</body>
+</html>
