@@ -20,21 +20,34 @@ Conta admin criada automaticamente:
 ## Deploy no Render
 
 1. Envie este projeto para um repositorio GitHub.
-2. No Render, crie um **Web Service**.
-3. Conecte o repositorio.
-4. Configure:
+2. No Render, use **New +** > **Blueprint** e selecione este repositorio. O arquivo `render.yaml` ja cria o Web Service free.
+3. Se preferir criar manualmente, use **Web Service** e configure:
    - Build Command: `npm install`
    - Start Command: `npm start`
    - Environment: `Node`
-5. Adicione a variavel:
+4. Adicione as variaveis:
    - `SESSION_SECRET`: uma string longa e secreta.
-   - `DATABASE_PATH`: `/var/data/novus.sqlite` se usar Render Disk.
-6. Para nao perder contas, jogos, visitas e inventario em redeploy, crie um **Persistent Disk** no Render:
+   - `SUPABASE_URL`: URL do projeto Supabase, se for usar backup gratis.
+   - `SUPABASE_SERVICE_ROLE_KEY`: service role key do Supabase, se for usar backup gratis.
+   - `DATABASE_PATH`: `/var/data/novus.sqlite` apenas se usar Render Disk.
+5. Para nao perder contas, jogos, visitas e inventario em redeploy, use Supabase backup gratis ou crie um **Persistent Disk** no Render:
    - Mount Path: `/var/data`
    - Size: o menor disponivel ja serve para comecar.
-7. Deploy.
+6. Deploy.
 
 Render usa a variavel `PORT` automaticamente; o servidor ja respeita `process.env.PORT`.
+
+## Multiplayer pequeno no Render
+
+O WebSocket do jogo roda no mesmo Web Service Express, em `/ws/game/:gameId`. Isso serve para alpha pequeno com uma unica instancia Render:
+
+- salas em memoria no processo Node;
+- limite atual de 20 jogadores por sala;
+- broadcast de estado a cada 50ms;
+- heartbeat WebSocket a cada 30s para limpar conexoes mortas;
+- endpoint de debug: `/api/realtime/status`.
+
+Como o estado das salas fica em memoria, nao use varias instancias Render free ao mesmo tempo. Para escalar de verdade, mova o realtime para um servico dedicado com estado compartilhado ou Durable Objects por sala.
 
 ## Modo Client Roblox Antigo
 
@@ -64,6 +77,8 @@ Compatibilidade:
 - Hats GLTF/GLB sao expostos como `modelUrl` + `hatTransform`, mas client Roblox 2008/2012 nao carrega GLTF diretamente. O launcher precisa converter para mesh/acessorio legado ou usar um formato ja compativel.
 
 Render hospeda site/API. O client antigo e o game server precisam de launcher/ambiente Windows separado.
+
+O repositorio nao inclui `RobloxPlayerBeta.exe` nem `RobloxStudioBeta.exe`. Esses arquivos sao proprietarios; o launcher apenas aponta para uma copia local configurada em `launcher/config.json`.
 
 ## Launcher local
 

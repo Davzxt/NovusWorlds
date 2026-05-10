@@ -76,6 +76,8 @@ function attachGameServer(server) {
   });
 
   wss.on('connection', (ws, req) => {
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
     const gameId = new URL(req.url, 'http://localhost').pathname.split('/').pop();
     const room = getRoom(gameId);
     let self = null;
@@ -128,6 +130,17 @@ function attachGameServer(server) {
   setInterval(() => {
     for (const room of rooms.values()) broadcast(room, { type: 'world_state', players: [...room.players.values()].map(packPlayer) });
   }, 50);
+
+  setInterval(() => {
+    for (const client of wss.clients) {
+      if (!client.isAlive) {
+        client.terminate();
+        continue;
+      }
+      client.isAlive = false;
+      client.ping();
+    }
+  }, 30000);
 }
 
 function packPlayer(p) {
@@ -138,4 +151,15 @@ function cryptoRandom() {
   return Math.random().toString(36).slice(2);
 }
 
-module.exports = { attachGameServer };
+function getGameServerStats() {
+  return {
+    rooms: [...rooms.entries()].map(([gameId, room]) => ({
+      gameId,
+      players: room.players.size,
+      usernames: [...room.players.values()].map(player => player.username)
+    })),
+    players: [...rooms.values()].reduce((sum, room) => sum + room.players.size, 0)
+  };
+}
+
+module.exports = { attachGameServer, getGameServerStats };
