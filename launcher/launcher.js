@@ -101,7 +101,7 @@ function launchViaCmd(resolved, args, label) {
   const body = [
     '@echo off',
     `cd /d ${cmdQuote(resolved.cwd)}`,
-    `start "" /max ${cmdQuote(resolved.exe)} ${quotedArgs}`,
+    `start "" ${label === 'server' ? '/min' : '/max'} ${cmdQuote(resolved.exe)} ${quotedArgs}`,
     `echo %date% %time% launched ${label} >> ${cmdQuote(logPath)}`
   ].join('\r\n');
   fs.writeFileSync(script, body);
@@ -118,7 +118,7 @@ function chooseTemplate(kind, template, exe) {
   const current = Array.isArray(template) ? template : ['auto'];
   if (isNovetusExe(exe) && (current.includes('auto') || isOldDefaultTemplate(kind, current))) {
     if (kind === 'studio') return ['-script', '{novetusStudioScript}', '{placeFile}'];
-    if (kind === 'server') return ['-script', '{novetusServerScript}', '{placeFile}'];
+    if (kind === 'server') return ['-script', '{novetusServerScript}', '-no3d', '{placeFile}'];
     return ['-script', '{novetusClientScript}'];
   }
   if (current.includes('auto')) return kind === 'studio' ? ['{placeFile}'] : ['{joinScript}', '{placeFile}'];
