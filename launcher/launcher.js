@@ -13,11 +13,21 @@ const config = fs.existsSync(configPath)
   ? JSON.parse(fs.readFileSync(configPath, 'utf8'))
   : JSON.parse(fs.readFileSync(path.join(__dirname, 'config.example.json'), 'utf8'));
 
-const uri = new URL(arg.replace(/^"|"$/g, ''));
 const cacheDir = expandEnv(config.cacheDir || path.join(process.env.LOCALAPPDATA || __dirname, 'NovusWorlds', 'Cache'));
 fs.mkdirSync(cacheDir, { recursive: true });
+const logPath = path.join(cacheDir, 'launcher.log');
+
+if (!arg) {
+  const message = 'Abra um jogo pelo site Novus Worlds. O Player precisa de um ticket novus:// para entrar em uma partida.';
+  log(message);
+  console.log(message);
+  process.exit(0);
+}
+
+const uri = new URL(arg.replace(/^"|"$/g, ''));
 
 main().catch(err => {
+  log(err.stack || err.message);
   console.error(err.stack || err.message);
   process.exit(1);
 });
@@ -59,13 +69,39 @@ async function openStudio() {
 }
 
 function launch(exe, args, label) {
-  if (!exe || config.launchMode === 'dry-run') {
-    console.log(`[dry-run] Would launch ${label}: ${exe || '(not configured)'} ${args.join(' ')}`);
+  const resolved = resolveExecutable(exe, label);
+  if (!resolved.exe || config.launchMode === 'dry-run') {
+    log(`[dry-run] Would launch ${label}: ${resolved.exe || exe || '(not configured)'} ${args.join(' ')}`);
+    console.log(`[dry-run] Would launch ${label}: ${resolved.exe || exe || '(not configured)'} ${args.join(' ')}`);
     return;
   }
-  if (!fs.existsSync(exe)) throw new Error(`${label} executable not found: ${exe}`);
-  const child = spawn(exe, args, { detached: true, stdio: 'ignore' });
+  if (!fs.existsSync(resolved.exe)) throw new Error(`${label} executable not found: ${resolved.exe}`);
+  log(`Launching ${label}: ${resolved.exe} ${args.join(' ')}`);
+  const child = spawn(resolved.exe, args, { detached: true, stdio: 'ignore', cwd: resolved.cwd });
   child.unref();
+}
+
+function resolveExecutable(value, label) {
+  const raw = expandEnv(value || '');
+  if (!raw) return { exe: '', cwd: __dirname };
+  if (fs.existsSync(raw) && fs.statSync(raw).isFile()) return { exe: raw, cwd: path.dirname(raw) };
+  if (fs.existsSync(raw) && fs.statSync(raw).isDirectory()) {
+    const candidates = label === 'studio'
+      ? ['RobloxApp_studio.exe', 'RobloxStudioBeta.exe', 'Novetus.exe']
+      : ['RobloxApp_solo.exe', 'RobloxApp_client.exe', 'RobloxPlayerBeta.exe', 'Novetus.exe'];
+    for (const name of candidates) {
+      const candidate = path.join(raw, name);
+      if (fs.existsSync(candidate)) return { exe: candidate, cwd: raw };
+    }
+    const exe = fs.readdirSync(raw).find(file => /\.exe$/i.test(file));
+    if (exe) return { exe: path.join(raw, exe), cwd: raw };
+  }
+  return { exe: raw, cwd: path.dirname(raw) || __dirname };
+}
+
+function log(message) {
+  const line = `[${new Date().toISOString()}] ${message}\n`;
+  try { fs.appendFileSync(logPath, line); } catch {}
 }
 
 async function text(url) {

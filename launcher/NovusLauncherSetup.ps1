@@ -27,6 +27,14 @@ function Pick-Exe($title, $targetBox) {
   }
 }
 
+function Pick-ClientFolder($targetBox) {
+  $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+  $dialog.Description = "Escolha a pasta do client Novetus, por exemplo clients\2011M"
+  if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    $targetBox.Text = $dialog.SelectedPath
+  }
+}
+
 function Pick-Folder($targetBox) {
   $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
   $dialog.Description = "Escolha a pasta de instalacao do Novus Launcher"
@@ -108,11 +116,13 @@ $installBox = Add-TextBox $form $defaultInstallDir 26 130 500
 $installBrowse = Add-Button $form "Escolher" 535 128 105 28
 
 Add-Label $form "Player/Client do Novetus" 26 170 260 20 | Out-Null
-$playerBox = Add-TextBox $form "" 26 192 500
+$defaultClientDir = "C:\Users\Administrator\Downloads\novetus-windows\clients\2011M"
+if (!(Test-Path $defaultClientDir)) { $defaultClientDir = "" }
+$playerBox = Add-TextBox $form $defaultClientDir 26 192 500
 $playerBrowse = Add-Button $form "Procurar" 535 190 105 28
 
 Add-Label $form "Studio do Novetus" 26 232 260 20 | Out-Null
-$studioBox = Add-TextBox $form "" 26 254 500
+$studioBox = Add-TextBox $form $defaultClientDir 26 254 500
 $studioBrowse = Add-Button $form "Procurar" 535 252 105 28
 
 $openNovetus = Add-Button $form "Abrir pagina do Novetus" 26 300 190 32
@@ -133,8 +143,8 @@ function Log($text) {
 }
 
 $installBrowse.Add_Click({ Pick-Folder $installBox })
-$playerBrowse.Add_Click({ Pick-Exe "Selecione o executavel do Player/Client do Novetus" $playerBox })
-$studioBrowse.Add_Click({ Pick-Exe "Selecione o executavel do Studio do Novetus" $studioBox })
+$playerBrowse.Add_Click({ Pick-ClientFolder $playerBox })
+$studioBrowse.Add_Click({ Pick-ClientFolder $studioBox })
 $openNovetus.Add_Click({ Start-Process "https://github.com/Novetus/Novetus_src" })
 $close.Add_Click({ $form.Close() })
 

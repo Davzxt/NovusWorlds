@@ -11,6 +11,17 @@ Metodo recomendado:
 3. Na GUI, selecione o executavel do Player/Client e do Studio do Novetus.
 4. Clique em instalar.
 
+Voce tambem pode selecionar uma pasta de client, por exemplo:
+
+```text
+C:\Users\Administrator\Downloads\novetus-windows\clients\2011M
+```
+
+Nesse caso o launcher procura automaticamente:
+
+- Player: `RobloxApp_solo.exe`, depois `RobloxApp_client.exe`
+- Studio: `RobloxApp_studio.exe`
+
 Metodo manual:
 
 1. Instale Node.js no Windows do jogador.
@@ -36,6 +47,12 @@ Use uma instalacao local do Novetus como base:
 https://github.com/Novetus/Novetus_src
 
 O Novus Launcher nao baixa nem redistribui executaveis proprietarios do Roblox. Ele apenas registra a ponte local e aponta para os executaveis que voce selecionar.
+
+Logs de erro ficam em:
+
+```text
+%LOCALAPPDATA%\NovusWorlds\Cache\launcher.log
+```
 
 ## Fluxo
 
