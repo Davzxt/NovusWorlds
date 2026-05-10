@@ -15,17 +15,19 @@
         <h1>Novus Client e Studio</h1>
         <p>O novo client e o novo Studio sao feitos em Godot/C# e usam o site como ponte para jogos, avatar, catalogo e mapas.</p>
         <div class="legacy-actions">
-          <a class="btn" href="/download/NovusLauncherSetup.exe" download>Baixar instalador antigo</a>
+          <a class="btn" href="/download/NovusGodotProjects.zip" download>Baixar projetos Godot</a>
           <a class="btn secondary" href="/studio.html">Abrir Studio</a>
+          <a class="btn secondary" href="/download/NovusLauncherSetup.exe" download>Instalador antigo</a>
         </div>
-        <p class="muted">O instalador antigo ainda existe enquanto a exportacao Godot nao fica pronta. A nova base esta no repositorio em <code>godot-client</code>, <code>godot-studio</code> e <code>godot-server</code>.</p>
+        <p class="muted">O pacote Godot contem client, studio, server e scripts locais. A exportacao para .exe depende dos Godot export templates 4.6.2.</p>
         <h2>Como usar</h2>
         <ol>
+          <li>Baixe o pacote <code>NovusGodotProjects.zip</code> ou use os projetos do repositorio.</li>
           <li>Abra o projeto <code>godot-client</code> no Godot .NET.</li>
           <li>Abra o projeto <code>godot-studio</code> no Godot .NET.</li>
           <li>Rode <code>godot-server</code> para multiplayer local.</li>
           <li>Para iOS, exporte o preset <code>iOS</code> em um Mac com Xcode.</li>
-          <li>Use <code>npm run godot:export:windows</code> para gerar builds Windows quando os templates estiverem instalados.</li>
+          <li>Use <code>npm run godot:templates</code> e depois <code>npm run godot:export:windows</code> para gerar builds Windows.</li>
         </ol>
         <details>
           <summary>Arquivos manuais</summary>
