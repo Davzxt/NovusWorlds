@@ -47,7 +47,8 @@ async function joinGame() {
   const avatarAssetsPath = write('avatar-assets.json', JSON.stringify(avatarAssets, null, 2));
   const placePath = write(`place-${gameId}.json`, JSON.stringify(place, null, 2));
   const map = normalizePlayableMap(place.map || {});
-  const placeFile = write(`place-${gameId}.rbxlx`, mapToRbxlx(map, place.title || `Place ${gameId}`));
+  const placeFile = write(`place-${gameId}.rbxl`, mapToRbxlx(map, place.title || `Place ${gameId}`));
+  const serverBootstrap = write('server-bootstrap.lua', novetusServerBootstrapScript(map));
   const avatarScript = write('avatar-appearance.lua', avatarToLua(avatar.avatar || {}, avatarAssets));
   const target = resolveExecutable(config.playerExe, 'player');
   const serverTarget = resolveExecutable(config.serverExe || config.playerExe, 'server');
@@ -60,7 +61,7 @@ async function joinGame() {
     placeFile,
     novetusSoloScript: novetusSoloScript(avatar.avatar || {}, target),
     novetusClientScript: novetusClientScript(avatar.avatar || {}, target),
-    novetusServerScript: novetusServerScript(serverTarget, map)
+    novetusServerScript: novetusServerScript(serverTarget, serverBootstrap)
   };
   console.log(`Downloaded join data:\n${joinPath}\n${avatarPath}\n${avatarAssetsPath}\n${placePath}\n${placeFile}\n${avatarScript}`);
   if (isNovetusExe(target.exe) && isNovetusExe(serverTarget.exe) && config.useNovetusLocalServer !== false) {
@@ -77,7 +78,7 @@ async function openStudio() {
   const baseUrl = need('baseUrl');
   const project = await json(`${baseUrl}/api/legacy/studio-project?ticket=${encodeURIComponent(ticket)}`);
   const projectPath = write(`studio-project-${project.gameId || 'new'}.json`, JSON.stringify(project, null, 2));
-  const placeFile = write(`studio-project-${project.gameId || 'new'}.rbxlx`, mapToRbxlx(normalizePlayableMap(project.map || {}), project.title || 'Novo Mundo'));
+  const placeFile = write(`studio-project-${project.gameId || 'new'}.rbxl`, mapToRbxlx(normalizePlayableMap(project.map || {}), project.title || 'Novo Mundo'));
   const target = resolveExecutable(config.studioExe, 'studio');
   const args = applyArgs(chooseTemplate('studio', config.studioArgs, target.exe), { projectJson: projectPath, placeFile, novetusStudioScript: novetusStudioScript(target) });
   console.log(`Downloaded studio project:\n${projectPath}\n${placeFile}`);
@@ -200,8 +201,8 @@ function novetusStudioScript(target) {
   return `dofile('${lua(novetusScriptPath(target))}'); _G.CSStudio(true)`;
 }
 
-function novetusServerScript(target, map) {
-  return `dofile('${lua(novetusScriptPath(target))}'); ${novetusServerBootstrapScript(map)} _G.CSServer(${novetusPort()},20,'','','',false,0,true)`;
+function novetusServerScript(target, bootstrapFile) {
+  return `dofile('${lua(novetusScriptPath(target))}'); dofile('${lua(bootstrapFile)}'); _G.CSServer(${novetusPort()},20,'','','',false,0,true)`;
 }
 
 function novetusClientScript(avatar, target) {
@@ -300,8 +301,8 @@ ${objects}
       spawn.Parent = workspace
     end
   end)
-end;
-`.replace(/\s+/g, ' ').trim();
+end
+`;
 }
 
 function novetusScriptPath(target) {
