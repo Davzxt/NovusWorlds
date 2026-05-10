@@ -4,6 +4,15 @@ Este launcher e a ponte local para client/studio Roblox 2012.
 
 ## Instalar
 
+Metodo recomendado:
+
+1. Baixe `NovusLauncherSetup.bat` pela pagina `/download.html`.
+2. Execute o instalador.
+3. Na GUI, selecione o executavel do Player/Client e do Studio do Novetus.
+4. Clique em instalar.
+
+Metodo manual:
+
 1. Instale Node.js no Windows do jogador.
 2. Copie `config.example.json` para `config.json`.
 3. Configure:
@@ -19,6 +28,14 @@ Este launcher e a ponte local para client/studio Roblox 2012.
 
 4. Rode `install-protocols.bat`.
 5. Para testar sem abrir executavel, mantenha `"launchMode": "dry-run"`.
+
+## Novetus
+
+Use uma instalacao local do Novetus como base:
+
+https://github.com/Novetus/Novetus_src
+
+O Novus Launcher nao baixa nem redistribui executaveis proprietarios do Roblox. Ele apenas registra a ponte local e aponta para os executaveis que voce selecionar.
 
 ## Fluxo
 
