@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Abrir Client - Novus Worlds</title>
+  <title>Abrir Novus Client - Novus Worlds</title>
   <link rel="stylesheet" href="/css/global.css">
   <link rel="stylesheet" href="/css/legacy-client.css">
 </head>
@@ -12,26 +12,40 @@
   <main class="wrap">
     <section class="panel legacy-launch">
       <div class="legacy-card">
-        <h1>Abrir no client Roblox antigo</h1>
-        <p>O Novus agora usa modo launcher. O navegador abre o protocolo local do client antigo e entrega join script, avatar, hats, roupas, faces e mapa pela API de compatibilidade.</p>
+        <h1>Abrir no Novus Client</h1>
+        <p>O novo client nativo e feito em Godot/C#. Ele carrega o mapa do site, usa o R6 local e conecta no servidor multiplayer Godot.</p>
         <div id="gameInfo" class="legacy-info">Carregando jogo...</div>
         <div class="legacy-actions">
-          <button id="launchBtn">Abrir Client</button>
-          <button id="copyBtn" class="secondary">Copiar protocolo</button>
-          <a class="btn secondary" href="/legacy-setup.html">Configurar launcher</a>
+          <button id="launchBtn">Como abrir</button>
+          <button id="copyBtn" class="secondary">Copiar comando local</button>
+          <a class="btn secondary" href="/download.html">Baixar Client</a>
         </div>
         <p id="status" class="muted"></p>
       </div>
       <aside class="legacy-note">
-        <h2>Compatibilidade</h2>
+        <h2>Novo pipeline</h2>
         <ul>
-          <li>Faces, shirts e pants funcionam como texturas/decal.</li>
-          <li>Hats GLTF/GLB precisam de conversor para mesh/acessorio legado no launcher.</li>
-          <li>O R6 usado pelo client antigo deve ser montado pelo appearance endpoint.</li>
+          <li>Mapa vem da API do site.</li>
+          <li>R6 usa o modelo local do projeto.</li>
+          <li>Multiplayer roda em servidor Godot dedicado.</li>
         </ul>
       </aside>
     </section>
   </main>
-  <script type="module" src="/js/legacy-launcher.js"></script>
+  <script type="module">
+    import {api, esc} from '/js/main.js';
+    const id = new URLSearchParams(location.search).get('id') || '1';
+    const gameInfo = document.getElementById('gameInfo');
+    const status = document.getElementById('status');
+    try {
+      const {game} = await api('/api/games/' + id);
+      gameInfo.innerHTML = `<b>${esc(game.title)}</b><br>Criador: ${esc(game.creator || 'NovusWorlds')}<br>${game.visit_count || 0} visitas unicas`;
+    } catch (e) {
+      gameInfo.textContent = e.message;
+    }
+    const command = `powershell -ExecutionPolicy Bypass -File tools/run-godot-client.ps1 ${id} ${location.origin}`;
+    launchBtn.onclick = () => { status.textContent = command; };
+    copyBtn.onclick = async () => { await navigator.clipboard.writeText(command); status.textContent = 'Comando copiado.'; };
+  </script>
 </body>
 </html>

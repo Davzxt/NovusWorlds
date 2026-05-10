@@ -11,33 +11,39 @@
   <div data-header></div>
   <main class="wrap">
     <section class="panel hero-studio">
-      <h1>Novus Studio 2012</h1>
-      <p>Construa no Roblox Studio 2012 usando o site como ponte. O Novus baixa seu projeto, gera um `.rbxlx` temporario e abre o Studio pelo launcher local.</p>
-      <p><a class="btn" href="/download.html">Baixar Launcher</a> <a class="btn secondary" href="/studio-dashboard.html">Meus Projetos</a></p>
+      <h1>Novus Studio</h1>
+      <p>Construa mundos no Studio nativo em Godot/C#. O site continua sendo a ponte para jogos, catalogo, contas e publicacao.</p>
+      <p><a class="btn" href="/download.html">Baixar Studio</a> <a class="btn secondary" href="/studio-dashboard.html">Meus Projetos</a></p>
     </section>
     <section class="panel legacy-launch">
       <div class="legacy-card">
         <h2>Abrir Studio</h2>
-        <p>Use esta area para abrir um projeto existente ou criar um novo mundo no Studio 2012.</p>
+        <p>Use esta area para abrir um projeto existente ou criar um novo mundo no Studio Godot.</p>
         <div id="projectInfo" class="legacy-info">Preparando projeto...</div>
         <div class="legacy-actions">
-          <button id="openStudioBtn">Abrir Studio</button>
-          <button id="copyBtn" class="secondary">Copiar protocolo</button>
-          <a class="btn secondary" href="/legacy-setup.html">Como funciona</a>
+          <button id="openStudioBtn">Como abrir</button>
+          <button id="copyBtn" class="secondary">Copiar comando local</button>
+          <a class="btn secondary" href="/download.html">Instalar</a>
         </div>
         <p id="status" class="muted"></p>
       </div>
       <aside class="legacy-note">
-        <h2>Pipeline atual</h2>
+        <h2>Pipeline Godot</h2>
         <ul>
           <li>Baixa projeto do site.</li>
-          <li>Converte mapa JSON para `.rbxlx` basico.</li>
-          <li>Abre o Studio configurado no launcher.</li>
-          <li>Publicacao de volta ainda precisa do conversor inverso `.rbxlx` para JSON.</li>
+          <li>Edita objetos em cena 3D nativa.</li>
+          <li>Salva mapa como JSON Novus.</li>
+          <li>Publicacao direta no site entra no proximo passo.</li>
         </ul>
       </aside>
     </section>
   </main>
-  <script type="module" src="/js/legacy-studio-launcher.js"></script>
+  <script type="module">
+    import '/js/main.js';
+    const command = `powershell -ExecutionPolicy Bypass -File tools/run-godot-studio.ps1 ${location.origin}`;
+    projectInfo.textContent = 'Abra o Studio Godot local usando o comando abaixo ate a exportacao do instalador novo ficar pronta.';
+    openStudioBtn.onclick = () => { status.textContent = command; };
+    copyBtn.onclick = async () => { await navigator.clipboard.writeText(command); status.textContent = 'Comando copiado.'; };
+  </script>
 </body>
 </html>

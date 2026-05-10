@@ -1,0 +1,17 @@
+config_version=5
+
+[application]
+config/name="Novus Worlds Client"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.6", "C#")
+
+[dotnet]
+project/assembly_name="NovusWorldsClient"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

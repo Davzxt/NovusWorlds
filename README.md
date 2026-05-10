@@ -1,6 +1,6 @@
 # Novus Worlds
 
-Novus Worlds e uma plataforma retro inspirada em jogos sociais de 2008. Inclui site, auth, catalogo, avatar R6, Studio 3D, painel admin, SQLite e modo launcher para client Roblox antigo.
+Novus Worlds e uma plataforma retro inspirada em jogos sociais de 2008. Inclui site, auth, catalogo, avatar R6, painel admin, SQLite e uma nova base nativa em Godot/C# para client, studio e servidor multiplayer dedicado.
 
 ## Rodar localmente
 
@@ -49,61 +49,35 @@ O WebSocket do jogo roda no mesmo Web Service Express, em `/ws/game/:gameId`. Is
 
 Como o estado das salas fica em memoria, nao use varias instancias Render free ao mesmo tempo. Para escalar de verdade, mova o realtime para um servico dedicado com estado compartilhado ou Durable Objects por sala.
 
-## Modo Client Roblox Antigo
+## Client, Studio e Server Godot
 
-O fluxo de jogo agora e launcher-based. `/game.html?id=X` cria um ticket e tenta abrir:
-
-```text
-novus://join?ticket=...&gameId=...&baseUrl=...
-```
-
-Endpoints para o launcher/client 2012:
+O caminho com client Roblox antigo/Novetus foi substituido por projetos proprios em Godot .NET:
 
 ```text
-POST /api/legacy/tickets
-GET  /api/legacy/join-script?ticket=...
-GET  /api/legacy/avatar?ticket=...
-GET  /api/legacy/avatar.xml?ticket=...
-GET  /api/legacy/place/:id
-GET  /api/legacy/assets/:id
+godot-client/  Player nativo, carrega mapa da API, usa r6.gltf e conecta no servidor Godot
+godot-studio/  Editor nativo separado para criar partes, spawn e salvar mapa JSON
+godot-server/  Servidor multiplayer dedicado via ENet
 ```
 
-Compatibilidade:
-
-- Faces sao expostas como textura/decal.
-- Shirts sao expostas como template de camisa.
-- Pants sao expostas como template de calca.
-- R6 e exposto no appearance endpoint para o launcher montar o personagem.
-- Hats GLTF/GLB sao expostos como `modelUrl` + `hatTransform`, mas client Roblox 2008/2012 nao carrega GLTF diretamente. O launcher precisa converter para mesh/acessorio legado ou usar um formato ja compativel.
-
-Render hospeda site/API. O client antigo e o game server precisam de launcher/ambiente Windows separado.
-
-O repositorio nao inclui `RobloxPlayerBeta.exe` nem `RobloxStudioBeta.exe`. Esses arquivos sao proprietarios; o launcher apenas aponta para uma copia local configurada em `launcher/config.json`.
-
-## Launcher local
-
-Uma primeira versao do launcher fica em:
+Scripts locais:
 
 ```text
-launcher/
+powershell -ExecutionPolicy Bypass -File tools/build-godot-projects.ps1
+powershell -ExecutionPolicy Bypass -File tools/run-godot-server.ps1
+powershell -ExecutionPolicy Bypass -File tools/run-godot-client.ps1 1 http://localhost:3000
+powershell -ExecutionPolicy Bypass -File tools/run-godot-studio.ps1 http://localhost:3000
+powershell -ExecutionPolicy Bypass -File tools/install-godot-export-templates.ps1
+powershell -ExecutionPolicy Bypass -File tools/export-godot-windows.ps1
+powershell -ExecutionPolicy Bypass -File tools/export-godot-server-linux.ps1
 ```
 
-Ele registra:
+Observacao: o Godot instalado e x64, entao os scripts definem `DOTNET_ROOT` para `%USERPROFILE%\.dotnet-x64`, onde fica o SDK x64 local.
 
-```text
-novus://join
-novus-studio://edit
-```
+### iOS
 
-Uso:
+O client tambem foi preparado para iOS com preset `iOS` em `godot-client/export_presets.cfg` e controles touch. Segundo a documentacao oficial do Godot 4.6, C# em iOS e suportado desde Godot 4.2, mas ainda e experimental; a exportacao para iOS precisa ser feita em um Mac com Xcode instalado. Veja `tools/export-godot-ios.md`.
 
-```text
-cd launcher
-copy config.example.json config.json
-install-protocols.bat
-```
-
-Por padrao o launcher vem em `dry-run`, entao ele baixa os arquivos de join/studio e imprime o que abriria. Configure `playerExe`, `studioExe` e mude `launchMode` quando tiver uma build 2012 real pronta.
+Os endpoints `/api/legacy/place/:id` e `/api/legacy/studio-project` continuam existindo por enquanto como API de compatibilidade para entregar mapas JSON aos apps Godot.
 
 ## Aviso importante sobre Render gratuito
 

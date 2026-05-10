@@ -6,3 +6,9 @@ novus.sqlite-wal
 npm-debug.log*
 public/uploads/catalog/*
 !public/uploads/catalog/.gitkeep
+**/.godot/
+**/.mono/
+**/bin/
+**/obj/
+build/
+*.tmp

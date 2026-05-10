@@ -12,20 +12,20 @@
   <main class="wrap">
     <section class="panel legacy-launch">
       <div class="legacy-card">
-        <h1>Novus Launcher</h1>
-        <p>Instale a ponte local para abrir jogos e Studio pelo Novetus.</p>
+        <h1>Novus Client e Studio</h1>
+        <p>O novo client e o novo Studio sao feitos em Godot/C# e usam o site como ponte para jogos, avatar, catalogo e mapas.</p>
         <div class="legacy-actions">
-          <a class="btn" href="/download/NovusLauncherSetup.exe" download>Baixar instalador</a>
-          <a class="btn secondary" href="https://github.com/Novetus/Novetus_src" target="_blank" rel="noopener">Abrir Novetus</a>
+          <a class="btn" href="/download/NovusLauncherSetup.exe" download>Baixar instalador antigo</a>
+          <a class="btn secondary" href="/studio.html">Abrir Studio</a>
         </div>
-        <p class="muted">O instalador abre uma GUI no Windows, baixa os arquivos do launcher, registra <code>novus://</code>, cria <code>config.json</code> e adiciona atalhos do Player e Studio na area de trabalho.</p>
+        <p class="muted">O instalador antigo ainda existe enquanto a exportacao Godot nao fica pronta. A nova base esta no repositorio em <code>godot-client</code>, <code>godot-studio</code> e <code>godot-server</code>.</p>
         <h2>Como usar</h2>
         <ol>
-          <li>Baixe ou compile o Novetus no seu computador.</li>
-          <li>Execute o instalador do Novus Launcher.</li>
-          <li>Na GUI, selecione o executavel do Player/Client e o executavel do Studio do Novetus.</li>
-          <li>Clique em instalar.</li>
-          <li>Abra um jogo pelo site. O atalho do Player nao abre partida sozinho sem ticket.</li>
+          <li>Abra o projeto <code>godot-client</code> no Godot .NET.</li>
+          <li>Abra o projeto <code>godot-studio</code> no Godot .NET.</li>
+          <li>Rode <code>godot-server</code> para multiplayer local.</li>
+          <li>Para iOS, exporte o preset <code>iOS</code> em um Mac com Xcode.</li>
+          <li>Use <code>npm run godot:export:windows</code> para gerar builds Windows quando os templates estiverem instalados.</li>
         </ol>
         <details>
           <summary>Arquivos manuais</summary>
@@ -34,8 +34,8 @@
       </div>
       <aside class="legacy-note">
         <h2>Importante</h2>
-        <p>O Novus nao inclui executaveis proprietarios do Roblox. Use uma instalacao local do Novetus como base e aponte o wizard para ela.</p>
-        <p>O launcher entrega ticket, mapa, avatar, hats, faces, shirts e pants para o client/studio configurado.</p>
+        <p>O caminho Novetus foi substituido por client proprio. Isso evita erro de `.rbxl` e da controle total sobre mapa, R6, fisica e multiplayer.</p>
+        <p>Para iOS, o client tem preset e controles touch, mas a exportacao precisa ser feita em macOS com Xcode e Apple Developer.</p>
       </aside>
     </section>
   </main>
