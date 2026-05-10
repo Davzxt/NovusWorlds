@@ -4,6 +4,7 @@ const db = require('../db');
 
 const router = express.Router();
 const tickets = new Map();
+const TICKET_TTL_MS = 30 * 60 * 1000;
 
 function baseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
@@ -120,7 +121,7 @@ router.post('/studio-tickets', (req, res) => {
 router.get('/join-script', (req, res) => {
   const ticket = String(req.query.ticket || '');
   const entry = tickets.get(ticket);
-  if (!entry || Date.now() - entry.createdAt > 5 * 60 * 1000) return res.status(403).type('text/plain').send('-- invalid ticket');
+  if (!entry || Date.now() - entry.createdAt > TICKET_TTL_MS) return res.status(403).type('text/plain').send('-- invalid ticket');
   const host = baseUrl(req);
   const script = `
 -- Novus Worlds legacy join script
@@ -183,7 +184,7 @@ router.get('/place/:id', (req, res) => {
 router.get('/studio-project', (req, res) => {
   const ticket = String(req.query.ticket || '');
   const entry = tickets.get(ticket);
-  if (!entry || entry.mode !== 'studio' || Date.now() - entry.createdAt > 5 * 60 * 1000) return res.status(403).json({ error: 'Ticket invalido.' });
+  if (!entry || entry.mode !== 'studio' || Date.now() - entry.createdAt > TICKET_TTL_MS) return res.status(403).json({ error: 'Ticket invalido.' });
   let game = null;
   if (entry.gameId) game = db.prepare('SELECT * FROM games WHERE id = ?').get(entry.gameId);
   res.json({
