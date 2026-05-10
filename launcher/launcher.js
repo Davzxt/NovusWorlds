@@ -83,26 +83,28 @@ function launch(resolved, args, label) {
   }
   if (!fs.existsSync(resolved.exe)) throw new Error(`${label} executable not found: ${resolved.exe}`);
   log(`Launching ${label}: ${resolved.exe} ${args.join(' ')}`);
-  const child = spawn(resolved.exe, args, { cwd: resolved.cwd, windowsHide: false });
-  let output = '';
-  child.stdout?.on('data', data => { output += data.toString(); });
-  child.stderr?.on('data', data => { output += data.toString(); });
-  child.on('error', err => {
-    log(`${label} failed to start: ${err.message}`);
-    showError(`${label} falhou ao iniciar: ${err.message}`);
-  });
-  const startedAt = Date.now();
-  child.on('exit', (code, signal) => {
-    const ms = Date.now() - startedAt;
-    log(`${label} exited after ${ms}ms with code=${code} signal=${signal || ''}${output ? `\n${output}` : ''}`);
-    if (ms < 5000) showError(`${label} abriu e fechou em ${Math.round(ms / 1000)}s. Veja o log para detalhes.`);
-  });
-  setTimeout(() => {
-    log(`${label} still running after startup window.`);
-    child.stdout?.unref?.();
-    child.stderr?.unref?.();
-    child.unref();
-  }, 5000).unref();
+  if (process.platform === 'win32') return launchViaCmd(resolved, args, label);
+  const child = spawn(resolved.exe, args, { detached: true, cwd: resolved.cwd, stdio: 'ignore' });
+  child.unref();
+}
+
+function launchViaCmd(resolved, args, label) {
+  const script = path.join(cacheDir, `launch-${label}.cmd`);
+  const quotedArgs = args.map(cmdQuote).join(' ');
+  const body = [
+    '@echo off',
+    `cd /d ${cmdQuote(resolved.cwd)}`,
+    `start "" /max ${cmdQuote(resolved.exe)} ${quotedArgs}`,
+    `echo %date% %time% launched ${label} >> ${cmdQuote(logPath)}`
+  ].join('\r\n');
+  fs.writeFileSync(script, body);
+  log(`Wrote ${script}`);
+  const child = spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true });
+  child.unref();
+}
+
+function cmdQuote(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
 function chooseTemplate(kind, template, exe) {
