@@ -296,6 +296,9 @@ function writeDataUrl(dataUrl, name) {
 function mapToRbxlx(map, title) {
   const objects = Array.isArray(map.objects) ? map.objects : [];
   const parts = objects.map((part, index) => partToXml(part, index)).join('\n');
+  const spawn = (Array.isArray(map.spawnPoints) && map.spawnPoints[0]) || { x: 0, y: 3, z: 0 };
+  const spawnXml = spawnToXml(spawn);
+  const lockScript = gameplayLockScript(spawn);
   return `<?xml version="1.0" encoding="utf-8"?>
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
   <External>null</External>
@@ -305,6 +308,8 @@ function mapToRbxlx(map, title) {
       <string name="Name">Workspace</string>
     </Properties>
 ${parts}
+${spawnXml}
+${lockScript}
   </Item>
   <Item class="Lighting" referent="RBX_LIGHTING">
     <Properties>
@@ -327,6 +332,56 @@ ${parts}
   <Meta name="ExplicitAutoJoints">true</Meta>
   <Meta name="PlaceTitle">${xml(title)}</Meta>
 </roblox>`;
+}
+
+function spawnToXml(spawn) {
+  const x = num(spawn.x, 0);
+  const y = num(spawn.y, 3);
+  const z = num(spawn.z, 0);
+  return `    <Item class="SpawnLocation" referent="RBX_SPAWN_0">
+      <Properties>
+        <string name="Name">SpawnLocation</string>
+        <bool name="Anchored">true</bool>
+        <bool name="CanCollide">true</bool>
+        <bool name="AllowTeamChangeOnTouch">false</bool>
+        <bool name="Neutral">true</bool>
+        <Vector3 name="size"><X>6</X><Y>1</Y><Z>6</Z></Vector3>
+        <CoordinateFrame name="CFrame">
+          <X>${x}</X><Y>${y}</Y><Z>${z}</Z>
+          <R00>1</R00><R01>0</R01><R02>0</R02>
+          <R10>0</R10><R11>1</R11><R12>0</R12>
+          <R20>0</R20><R21>0</R21><R22>1</R22>
+        </CoordinateFrame>
+        <Color3uint8 name="Color3uint8">255</Color3uint8>
+        <int name="BrickColor">23</int>
+        <int name="TopSurface">3</int>
+        <int name="BottomSurface">3</int>
+        <float name="Transparency">0.25</float>
+      </Properties>
+    </Item>`;
+}
+
+function gameplayLockScript(spawn) {
+  const source = `
+local spawn = Vector3.new(${num(spawn.x, 0)}, ${num(spawn.y, 3) + 4}, ${num(spawn.z, 0)})
+local function lockPlayer(player)
+  pcall(function() player.Backpack:ClearAllChildren() end)
+  player.CharacterAdded:connect(function(character)
+    wait(0.2)
+    local torso = character:FindFirstChild("Torso")
+    if torso then torso.CFrame = CFrame.new(spawn) end
+  end)
+end
+game.Players.PlayerAdded:connect(lockPlayer)
+for _, player in pairs(game.Players:GetPlayers()) do lockPlayer(player) end
+`;
+  return `    <Item class="Script" referent="RBX_GAMEPLAY_LOCK">
+      <Properties>
+        <string name="Name">NovusGameplayLock</string>
+        <bool name="Disabled">false</bool>
+        <ProtectedString name="Source">${xml(source)}</ProtectedString>
+      </Properties>
+    </Item>`;
 }
 
 function partToXml(part, index) {
