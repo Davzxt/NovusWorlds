@@ -175,8 +175,8 @@ $install.Add_Click({
       studioExe = $studioBox.Text.Trim()
       cacheDir = $defaultCacheDir
       launchMode = "live"
-      playerArgs = @("{joinScript}", "{placeFile}")
-      studioArgs = @("{placeFile}")
+      playerArgs = @("auto")
+      studioArgs = @("auto")
     }
     $configPath = Join-Path $installDir "config.json"
     $config | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8

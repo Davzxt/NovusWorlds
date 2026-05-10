@@ -3,15 +3,10 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const arg = process.argv.slice(2).join(' ');
-if (!arg) {
-  console.log('Usage: node launcher.js "novus://join?ticket=...&gameId=...&baseUrl=..."');
-  process.exit(0);
-}
-
 const configPath = path.join(__dirname, 'config.json');
 const config = fs.existsSync(configPath)
-  ? JSON.parse(fs.readFileSync(configPath, 'utf8'))
-  : JSON.parse(fs.readFileSync(path.join(__dirname, 'config.example.json'), 'utf8'));
+  ? readJson(configPath)
+  : readJson(path.join(__dirname, 'config.example.json'));
 
 const cacheDir = expandEnv(config.cacheDir || path.join(process.env.LOCALAPPDATA || __dirname, 'NovusWorlds', 'Cache'));
 fs.mkdirSync(cacheDir, { recursive: true });
@@ -28,6 +23,7 @@ const uri = new URL(arg.replace(/^"|"$/g, ''));
 
 main().catch(err => {
   log(err.stack || err.message);
+  showError(err.message || String(err));
   console.error(err.stack || err.message);
   process.exit(1);
 });
@@ -50,11 +46,21 @@ async function joinGame() {
   const avatarPath = write('avatar.json', JSON.stringify(avatar, null, 2));
   const avatarAssetsPath = write('avatar-assets.json', JSON.stringify(avatarAssets, null, 2));
   const placePath = write(`place-${gameId}.json`, JSON.stringify(place, null, 2));
-  const placeFile = write(`place-${gameId}.rbxlx`, mapToRbxlx(place.map || {}, place.title || `Place ${gameId}`));
+  const placeFile = write(`place-${gameId}.rbxl`, mapToRbxlx(place.map || {}, place.title || `Place ${gameId}`));
   const avatarScript = write('avatar-appearance.lua', avatarToLua(avatar.avatar || {}, avatarAssets));
-  const args = applyArgs(config.playerArgs || ['{joinScript}', '{placeFile}'], { joinScript: joinPath, avatarJson: avatarPath, avatarAssets: avatarAssetsPath, avatarScript, placeJson: placePath, placeFile });
+  const target = resolveExecutable(config.playerExe, 'player');
+  const values = {
+    joinScript: joinPath,
+    avatarJson: avatarPath,
+    avatarAssets: avatarAssetsPath,
+    avatarScript,
+    placeJson: placePath,
+    placeFile,
+    novetusSoloScript: novetusSoloScript(avatar.avatar || {}, target)
+  };
+  const args = applyArgs(chooseTemplate('player', config.playerArgs, target.exe), values);
   console.log(`Downloaded join data:\n${joinPath}\n${avatarPath}\n${avatarAssetsPath}\n${placePath}\n${placeFile}\n${avatarScript}`);
-  launch(config.playerExe, args, 'player');
+  launch(target, args, 'player');
 }
 
 async function openStudio() {
@@ -62,23 +68,83 @@ async function openStudio() {
   const baseUrl = need('baseUrl');
   const project = await json(`${baseUrl}/api/legacy/studio-project?ticket=${encodeURIComponent(ticket)}`);
   const projectPath = write(`studio-project-${project.gameId || 'new'}.json`, JSON.stringify(project, null, 2));
-  const placeFile = write(`studio-project-${project.gameId || 'new'}.rbxlx`, mapToRbxlx(project.map || {}, project.title || 'Novo Mundo'));
-  const args = applyArgs(config.studioArgs || ['{placeFile}'], { projectJson: projectPath, placeFile });
+  const placeFile = write(`studio-project-${project.gameId || 'new'}.rbxl`, mapToRbxlx(project.map || {}, project.title || 'Novo Mundo'));
+  const target = resolveExecutable(config.studioExe, 'studio');
+  const args = applyArgs(chooseTemplate('studio', config.studioArgs, target.exe), { projectJson: projectPath, placeFile, novetusStudioScript: novetusStudioScript(target) });
   console.log(`Downloaded studio project:\n${projectPath}\n${placeFile}`);
-  launch(config.studioExe, args, 'studio');
+  launch(target, args, 'studio');
 }
 
-function launch(exe, args, label) {
-  const resolved = resolveExecutable(exe, label);
+function launch(resolved, args, label) {
   if (!resolved.exe || config.launchMode === 'dry-run') {
-    log(`[dry-run] Would launch ${label}: ${resolved.exe || exe || '(not configured)'} ${args.join(' ')}`);
-    console.log(`[dry-run] Would launch ${label}: ${resolved.exe || exe || '(not configured)'} ${args.join(' ')}`);
+    log(`[dry-run] Would launch ${label}: ${resolved.exe || '(not configured)'} ${args.join(' ')}`);
+    console.log(`[dry-run] Would launch ${label}: ${resolved.exe || '(not configured)'} ${args.join(' ')}`);
     return;
   }
   if (!fs.existsSync(resolved.exe)) throw new Error(`${label} executable not found: ${resolved.exe}`);
   log(`Launching ${label}: ${resolved.exe} ${args.join(' ')}`);
-  const child = spawn(resolved.exe, args, { detached: true, stdio: 'ignore', cwd: resolved.cwd });
-  child.unref();
+  const child = spawn(resolved.exe, args, { cwd: resolved.cwd, windowsHide: false });
+  let output = '';
+  child.stdout?.on('data', data => { output += data.toString(); });
+  child.stderr?.on('data', data => { output += data.toString(); });
+  child.on('error', err => {
+    log(`${label} failed to start: ${err.message}`);
+    showError(`${label} falhou ao iniciar: ${err.message}`);
+  });
+  const startedAt = Date.now();
+  child.on('exit', (code, signal) => {
+    const ms = Date.now() - startedAt;
+    log(`${label} exited after ${ms}ms with code=${code} signal=${signal || ''}${output ? `\n${output}` : ''}`);
+    if (ms < 5000) showError(`${label} abriu e fechou em ${Math.round(ms / 1000)}s. Veja o log para detalhes.`);
+  });
+  setTimeout(() => {
+    log(`${label} still running after startup window.`);
+    child.stdout?.unref?.();
+    child.stderr?.unref?.();
+    child.unref();
+  }, 5000).unref();
+}
+
+function chooseTemplate(kind, template, exe) {
+  const current = Array.isArray(template) ? template : ['auto'];
+  if (isNovetusExe(exe) && (current.includes('auto') || isOldDefaultTemplate(kind, current))) {
+    return kind === 'studio'
+      ? ['-script', '{novetusStudioScript}', '{placeFile}']
+      : ['-script', '{novetusSoloScript}', '{placeFile}'];
+  }
+  if (current.includes('auto')) return kind === 'studio' ? ['{placeFile}'] : ['{joinScript}', '{placeFile}'];
+  return current;
+}
+
+function isOldDefaultTemplate(kind, template) {
+  const joined = template.join('|');
+  return kind === 'studio' ? joined === '{placeFile}' : joined === '{joinScript}|{placeFile}';
+}
+
+function isNovetusExe(exe) {
+  return /RobloxApp_(solo|client|studio|server)\.exe$/i.test(String(exe || ''));
+}
+
+function novetusSoloScript(avatar, target) {
+  const userId = Number(avatar.userId || 1) || 1;
+  const username = lua(avatar.username || 'NovusPlayer');
+  const colors = avatar.colors || {};
+  const scriptPath = lua(novetusScriptPath(target));
+  const head = brick(colors.head, 24);
+  const torso = brick(colors.torso, 23);
+  const arms = brick(colors.arms, 24);
+  const legs = brick(colors.legs, 26);
+  return `dofile('${scriptPath}'); _G.CSSolo(${userId},'${username}',0,0,0,${head},${torso},${arms},${arms},${legs},${legs},0,0,0,0,0,0,0,true)`;
+}
+
+function novetusStudioScript(target) {
+  return `dofile('${lua(novetusScriptPath(target))}'); _G.CSStudio(true)`;
+}
+
+function novetusScriptPath(target) {
+  const local = path.join(target.cwd || '', 'content', 'scripts', 'CSMPFunctions.lua');
+  if (fs.existsSync(local)) return local.replace(/\\/g, '/');
+  return 'rbxasset://scripts/CSMPFunctions.lua';
 }
 
 function resolveExecutable(value, label) {
@@ -102,6 +168,13 @@ function resolveExecutable(value, label) {
 function log(message) {
   const line = `[${new Date().toISOString()}] ${message}\n`;
   try { fs.appendFileSync(logPath, line); } catch {}
+}
+
+function showError(message) {
+  if (process.platform !== 'win32') return;
+  const text = `${message}\n\nLog: ${logPath}`.replace(/'/g, "''");
+  const script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('${text}', 'Novus Launcher', 'OK', 'Error')`;
+  try { spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], { detached: true, stdio: 'ignore' }).unref(); } catch {}
 }
 
 async function text(url) {
@@ -138,6 +211,10 @@ function expandEnv(value) {
 
 function applyArgs(template, values) {
   return template.map(arg => String(arg).replace(/\{([A-Za-z0-9_]+)\}/g, (_, key) => values[key] || ''));
+}
+
+function readJson(file) {
+  return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 }
 
 async function cacheAvatarAssets(avatar) {
@@ -180,7 +257,7 @@ function mapToRbxlx(map, title) {
   const objects = Array.isArray(map.objects) ? map.objects : [];
   const parts = objects.map((part, index) => partToXml(part, index)).join('\n');
   return `<?xml version="1.0" encoding="utf-8"?>
-<roblox version="4">
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
   <External>null</External>
   <External>nil</External>
   <Item class="Workspace" referent="RBX0">
@@ -340,6 +417,20 @@ function hexToRgb(hex) {
 function num(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function brick(hex, fallback) {
+  const value = String(hex || '').toLowerCase();
+  const table = {
+    '#f5cd30': 24,
+    '#0d69ac': 23,
+    '#1b2a35': 26,
+    '#ffffff': 1,
+    '#c4281c': 21,
+    '#00cc44': 28,
+    '#ffd700': 24
+  };
+  return table[value] || fallback;
 }
 
 function xml(value) {

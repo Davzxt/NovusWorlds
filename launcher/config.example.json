@@ -3,6 +3,6 @@
   "studioExe": "C:\\\\Novus2012\\\\RobloxStudioBeta.exe",
   "cacheDir": "%LOCALAPPDATA%\\\\NovusWorlds\\\\Cache",
   "launchMode": "dry-run",
-  "playerArgs": ["{joinScript}", "{placeFile}"],
-  "studioArgs": ["{placeFile}"]
+  "playerArgs": ["auto"],
+  "studioArgs": ["auto"]
 }

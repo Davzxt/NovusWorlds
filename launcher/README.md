@@ -33,7 +33,9 @@ Metodo manual:
   "playerExe": "C:\\Novus2012\\RobloxPlayerBeta.exe",
   "studioExe": "C:\\Novus2012\\RobloxStudioBeta.exe",
   "cacheDir": "%LOCALAPPDATA%\\NovusWorlds\\Cache",
-  "launchMode": "dry-run"
+  "launchMode": "dry-run",
+  "playerArgs": ["auto"],
+  "studioArgs": ["auto"]
 }
 ```
 
