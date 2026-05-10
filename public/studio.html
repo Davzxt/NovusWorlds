@@ -3,29 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Abrir Studio - Novus Worlds</title>
+  <title>Novus Studio - Novus Worlds</title>
   <link rel="stylesheet" href="/css/global.css">
   <link rel="stylesheet" href="/css/legacy-client.css">
 </head>
 <body>
   <div data-header></div>
   <main class="wrap">
+    <section class="panel hero-studio">
+      <h1>Novus Studio 2012</h1>
+      <p>Construa no Roblox Studio 2012 usando o site como ponte. O Novus baixa seu projeto, gera um `.rbxlx` temporario e abre o Studio pelo launcher local.</p>
+      <p><a class="btn" href="/download.html">Baixar Launcher</a> <a class="btn secondary" href="/studio-dashboard.html">Meus Projetos</a></p>
+    </section>
     <section class="panel legacy-launch">
       <div class="legacy-card">
-        <h1>Abrir Roblox Studio 2012</h1>
-        <p>O Studio agora funciona como ponte. O navegador gera um ticket e chama o launcher local para abrir o Roblox Studio 2012 com o projeto selecionado.</p>
+        <h2>Abrir Studio</h2>
+        <p>Use esta area para abrir um projeto existente ou criar um novo mundo no Studio 2012.</p>
         <div id="projectInfo" class="legacy-info">Preparando projeto...</div>
         <div class="legacy-actions">
           <button id="openStudioBtn">Abrir Studio</button>
           <button id="copyBtn" class="secondary">Copiar protocolo</button>
-          <a class="btn secondary" href="/studio-dashboard.html">Dashboard</a>
-          <a class="btn secondary" href="/legacy-setup.html">Configurar launcher</a>
+          <a class="btn secondary" href="/legacy-setup.html">Como funciona</a>
         </div>
         <p id="status" class="muted"></p>
       </div>
       <aside class="legacy-note">
-        <h2>Como salva</h2>
-        <p>O primeiro launcher apenas abre o projeto. Para publicar de volta no site, ele precisa converter o arquivo salvo do Studio para o JSON de mapa Novus e enviar para a API.</p>
+        <h2>Pipeline atual</h2>
+        <ul>
+          <li>Baixa projeto do site.</li>
+          <li>Converte mapa JSON para `.rbxlx` basico.</li>
+          <li>Abre o Studio configurado no launcher.</li>
+          <li>Publicacao de volta ainda precisa do conversor inverso `.rbxlx` para JSON.</li>
+        </ul>
       </aside>
     </section>
   </main>

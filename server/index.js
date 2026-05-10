@@ -58,6 +58,7 @@ app.use('/admin', (req, res, next) => {
 app.use('/vendor/three', express.static(path.join(__dirname, '..', 'node_modules', 'three')));
 app.use('/vendor/babylonjs', express.static(path.join(__dirname, '..', 'node_modules', 'babylonjs')));
 app.use('/vendor/babylonjs-loaders', express.static(path.join(__dirname, '..', 'node_modules', 'babylonjs-loaders')));
+app.use('/download/launcher', express.static(path.join(__dirname, '..', 'launcher')));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/api/auth', auth);

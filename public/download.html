@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Download - Novus Worlds</title>
+  <link rel="stylesheet" href="/css/global.css">
+  <link rel="stylesheet" href="/css/legacy-client.css">
+</head>
+<body>
+  <div data-header></div>
+  <main class="wrap">
+    <section class="panel legacy-launch">
+      <div class="legacy-card">
+        <h1>Baixar Novus Launcher</h1>
+        <p>O site e a ponte. Para jogar ou editar no Studio 2012, o Windows precisa do launcher local e dos arquivos do client Roblox 2012 configurados no computador.</p>
+        <div class="legacy-actions">
+          <a class="btn" href="/download/launcher/launcher.js" download>Baixar launcher.js</a>
+          <a class="btn secondary" href="/download/launcher/install-protocols.bat" download>Baixar instalador</a>
+          <a class="btn secondary" href="/download/launcher/config.example.json" download>Baixar config</a>
+          <a class="btn secondary" href="/download/launcher/README.md" download>Guia</a>
+        </div>
+        <h2>Instalacao rapida</h2>
+        <ol>
+          <li>Crie uma pasta, por exemplo <code>C:\NovusLauncher</code>.</li>
+          <li>Coloque os arquivos baixados nela.</li>
+          <li>Renomeie <code>config.example.json</code> para <code>config.json</code>.</li>
+          <li>Edite os caminhos de <code>playerExe</code> e <code>studioExe</code>.</li>
+          <li>Execute <code>install-protocols.bat</code>.</li>
+        </ol>
+      </div>
+      <aside class="legacy-note">
+        <h2>Client 2012</h2>
+        <p>O Novus nao baixa automaticamente arquivos proprietarios do Roblox. Voce precisa colocar uma build 2012 compatível no computador e apontar o launcher para os executaveis.</p>
+        <p>O launcher ja baixa join script, avatar, mapa JSON, gera `.rbxlx` basico e gera script Lua de appearance.</p>
+      </aside>
+    </section>
+  </main>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

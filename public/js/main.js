@@ -24,7 +24,7 @@ export async function renderHeader() {
   host.innerHTML = `
     <div class="topbar"><div class="wrap nav">
       <a class="logo" href="/">Novus Worlds</a>
-      <div class="links"><a href="/">Inicio</a><a href="/games.html">Jogos</a><a href="/catalog.html">Catalogo</a><a href="/search.html">Pesquisa</a><a href="/forum.html">Forum</a><a href="/about.html">Sobre</a></div>
+      <div class="links"><a href="/">Inicio</a><a href="/games.html">Jogos</a><a href="/catalog.html">Catalogo</a><a href="/download.html">Download</a><a href="/search.html">Pesquisa</a><a href="/forum.html">Forum</a><a href="/about.html">Sobre</a></div>
       <div class="userbox">${user ? `<span class="novux">N$ ${user.novux}</span><a class="btn secondary" href="/profile.html?user=${encodeURIComponent(user.username)}">${user.username}</a><a class="btn secondary" href="/friends.html">Amigos</a><a class="btn secondary" href="/avatar.html">Avatar</a><a class="btn" href="/studio-dashboard.html">Studio</a>${user.is_admin ? '<a class="btn secondary" href="/admin/index.html">Admin</a>' : ''}<button id="logoutBtn" class="danger">Sair</button>` : '<a class="btn secondary" href="/login.html">Entrar</a><a class="btn" href="/register.html">Registrar</a>'}</div>
     </div></div>`;
   document.getElementById('logoutBtn')?.addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST' }); location.href = '/'; });
