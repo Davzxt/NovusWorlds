@@ -32,22 +32,9 @@ function absolute(req, url) {
   return `${baseUrl(req)}/${value.replace(/^\/+/, '')}`;
 }
 
-function legacyType(item) {
-  if (item.type === 'face') return 'FaceDecal';
-  if (item.type === 'shirt') return 'ShirtTemplate';
-  if (item.type === 'pants') return 'PantsTemplate';
-  if (item.type === 'hat') return legacyHatCompatible(item) ? 'HatMesh' : 'HatNeedsMeshConversion';
-  return 'Unknown';
-}
-
 function hatModelUrl(item) {
   if (item.type !== 'hat') return item.model_url;
   return item.model_url || (/\.(gltf|glb|obj|mesh)$/i.test(String(item.asset_url || '')) ? item.asset_url : null);
-}
-
-function legacyHatCompatible(item) {
-  const model = String(hatModelUrl(item) || '');
-  return /\.(mesh|rbxm|rbxmx)$/i.test(model) || /^rbxasset:\/\//i.test(model);
 }
 
 function getUserByRequest(req) {
@@ -80,12 +67,11 @@ function getResolvedAvatar(user, req) {
       id: item.id,
       name: item.name,
       type: item.type,
-      legacyType: legacyType(item),
       textureUrl: absolute(req, item.type === 'hat' && hatModelUrl(item) === item.asset_url ? item.thumbnail_url : item.asset_url),
       modelUrl: absolute(req, hatModelUrl(item)),
-      hatTransform: parseJson(item.hat_transform, {}),
-      compatible: item.type !== 'hat' || legacyHatCompatible(item),
-      note: item.type === 'hat' && !legacyHatCompatible(item) ? 'Este chapeu precisa ser convertido para mesh legado antes de funcionar no Novetus/Roblox 2011.' : null
+      assetUrl: absolute(req, item.asset_url),
+      thumbnailUrl: absolute(req, item.thumbnail_url),
+      hatTransform: parseJson(item.hat_transform, {})
     }))
   };
 }
@@ -103,8 +89,9 @@ router.post('/tickets', (req, res) => {
     username: user.username,
     serverHost: gameServerHost(req),
     serverPort: gameServerPort(),
+    joinDataUrl: `${baseUrl(req)}/api/legacy/tickets/${ticket}`,
     protocolUrl: `novus://join?ticket=${ticket}&gameId=${gameId}&baseUrl=${encodeURIComponent(baseUrl(req))}&server=${encodeURIComponent(gameServerHost(req))}&port=${gameServerPort()}`,
-    joinScriptUrl: `${baseUrl(req)}/api/legacy/join-script?ticket=${ticket}`
+    placeUrl: `${baseUrl(req)}/api/legacy/place/${gameId}`
   });
 });
 
@@ -151,19 +138,11 @@ router.get('/join-script', (req, res) => {
   if (!entry || Date.now() - entry.createdAt > TICKET_TTL_MS) return res.status(403).type('text/plain').send('-- invalid ticket');
   const host = baseUrl(req);
   const script = `
--- Novus Worlds legacy join script
+-- Novus Worlds join ticket
 local baseUrl = "${host}"
 local ticket = "${ticket}"
 local gameId = ${entry.gameId}
 local username = "${entry.username.replace(/"/g, '')}"
-
-pcall(function()
-  game:GetService("Players").LocalPlayer.Name = username
-end)
-
--- Launcher/client adapter should fetch:
--- baseUrl .. "/api/legacy/avatar?ticket=" .. ticket
--- baseUrl .. "/api/legacy/place/" .. gameId
 `;
   res.type('text/plain').send(script.trim());
 });
@@ -189,7 +168,7 @@ router.get('/avatar.xml', (req, res) => {
     `  <Colors head="${avatar.colors.head}" torso="${avatar.colors.torso}" arms="${avatar.colors.arms}" legs="${avatar.colors.legs}" />`
   ];
   for (const item of avatar.items) {
-    lines.push(`  <Item id="${item.id}" type="${item.type}" legacyType="${item.legacyType}" compatible="${item.compatible}" texture="${escapeXml(item.textureUrl || '')}" model="${escapeXml(item.modelUrl || '')}" />`);
+    lines.push(`  <Item id="${item.id}" type="${item.type}" texture="${escapeXml(item.textureUrl || '')}" model="${escapeXml(item.modelUrl || '')}" />`);
   }
   lines.push('</Avatar>');
   res.type('application/xml').send(lines.join('\n'));
@@ -202,8 +181,7 @@ router.get('/place/:id', (req, res) => {
   res.json({
     id: game.id,
     title: game.title,
-    format: 'NovusMapJsonForLegacyAdapter',
-    note: 'O launcher precisa converter este JSON para .rbxl/.rbxlx ou inserir as Parts via script no client antigo.',
+    format: 'NovusMapJson',
     map
   });
 });
@@ -227,8 +205,7 @@ router.get('/studio-project', (req, res) => {
       spawnPoints: [{ x: 0, y: 3, z: 0 }],
       ambient: '#404040',
       skyColor: '#87CEEB'
-    },
-    note: 'Launcher precisa converter este JSON para um arquivo .rbxl/.rbxlx temporario e abrir no Roblox Studio 2012.'
+    }
   });
 });
 
@@ -239,11 +216,11 @@ router.get('/assets/:id', (req, res) => {
     id: item.id,
     name: item.name,
     type: item.type,
-    legacyType: legacyType(item),
     textureUrl: absolute(req, item.type === 'hat' && hatModelUrl(item) === item.asset_url ? item.thumbnail_url : item.asset_url),
     modelUrl: absolute(req, hatModelUrl(item)),
-    hatTransform: parseJson(item.hat_transform, {}),
-    compatible: item.type !== 'hat' || legacyHatCompatible(item)
+    assetUrl: absolute(req, item.asset_url),
+    thumbnailUrl: absolute(req, item.thumbnail_url),
+    hatTransform: parseJson(item.hat_transform, {})
   });
 });
 

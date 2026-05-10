@@ -22,6 +22,7 @@ public partial class ClientMain : Node3D
         var args = OS.GetCmdlineArgs();
         var gameId = ReadArg(args, "--game", "1");
         var baseUrl = ReadArg(args, "--base-url", "http://localhost:3000");
+        var ticket = ReadArg(args, "--ticket", "");
         var serverHost = ReadArg(args, "--server", "127.0.0.1");
         var serverPort = ReadIntArg(args, "--port", 53640);
         try { map = await NovusApi.LoadPlace(baseUrl, gameId); }
@@ -29,6 +30,8 @@ public partial class ClientMain : Node3D
         AddChild(MapBuilder.Build(map));
         SetupLighting();
         SpawnPlayer();
+        try { player.SetAvatar(await NovusApi.LoadAvatar(baseUrl, ticket)); }
+        catch (Exception ex) { GD.PushWarning($"Avatar not loaded: {ex.Message}"); }
         SetupMobileHud();
         ConnectMultiplayer(serverHost, serverPort);
     }
@@ -144,11 +147,7 @@ public partial class ClientMain : Node3D
 
     private static Node3D CreateRemotePlayer(long id)
     {
-        var root = new Node3D { Name = $"Player_{id}" };
-        var body = new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(2, 3, 1) }, Position = new Vector3(0, 1.5f, 0) };
-        body.MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.9f, 0.1f, 0.1f), Roughness = 0.7f };
-        root.AddChild(body);
-        return root;
+        return new R6Character { Name = $"Player_{id}", IsRemote = true };
     }
 
     private void SetupLighting()

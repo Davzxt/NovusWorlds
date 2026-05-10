@@ -12,5 +12,5 @@ reg add HKCU\Software\Classes\novus-studio /v "URL Protocol" /d "" /f
 reg add HKCU\Software\Classes\novus-studio\shell\open\command /ve /d "\"%NODE%\" \"%LAUNCHER_DIR%launcher.js\" \"%%1\"" /f
 
 echo Protocolos novus:// e novus-studio:// registrados.
-echo Copie config.example.json para config.json e configure os caminhos do Player e Studio 2012.
+echo Configure config.json com os caminhos do NovusWorldsClient.exe e NovusWorldsStudio.exe.
 pause

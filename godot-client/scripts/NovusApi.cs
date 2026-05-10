@@ -6,6 +6,19 @@ using System.Threading.Tasks;
 
 public static class NovusApi
 {
+    public static async Task<NovusAvatar> LoadAvatar(string baseUrl, string ticket)
+    {
+        if (string.IsNullOrWhiteSpace(ticket)) return new NovusAvatar();
+        var http = new HttpRequest();
+        AddChildTemp(http);
+        var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/avatar?ticket={Uri.EscapeDataString(ticket)}");
+        if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
+        var result = await WaitForRequest(http);
+        if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}");
+        using var doc = JsonDocument.Parse(result.Body.GetStringFromUtf8());
+        return ParseAvatar(doc.RootElement.TryGetProperty("avatar", out var avatar) ? avatar : doc.RootElement);
+    }
+
     public static async Task<NovusMap> LoadPlace(string baseUrl, string gameId)
     {
         var http = new HttpRequest();
@@ -87,6 +100,40 @@ public static class NovusApi
         }
         EnsurePlayable(map);
         return map;
+    }
+
+    private static NovusAvatar ParseAvatar(JsonElement root)
+    {
+        var avatar = new NovusAvatar { Username = GetString(root, "username", "NovusPlayer") };
+        if (root.TryGetProperty("colors", out var colors))
+        {
+            avatar.HeadColor = ParseColor(GetString(colors, "head", "#F5CD30"), avatar.HeadColor);
+            avatar.TorsoColor = ParseColor(GetString(colors, "torso", "#0D69AC"), avatar.TorsoColor);
+            avatar.ArmsColor = ParseColor(GetString(colors, "arms", "#F5CD30"), avatar.ArmsColor);
+            avatar.LegsColor = ParseColor(GetString(colors, "legs", "#1B2A35"), avatar.LegsColor);
+        }
+        if (root.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in items.EnumerateArray())
+            {
+                var parsed = new NovusAvatarItem
+                {
+                    Id = item.TryGetProperty("id", out var id) && id.TryGetInt32(out var itemId) ? itemId : 0,
+                    Name = GetString(item, "name", "Item"),
+                    Type = GetString(item, "type", ""),
+                    ModelUrl = GetString(item, "modelUrl", ""),
+                    TextureUrl = GetString(item, "textureUrl", "")
+                };
+                if (item.TryGetProperty("hatTransform", out var transform))
+                {
+                    if (transform.TryGetProperty("position", out var pos)) parsed.HatPosition = new Vector3(GetFloat(pos, "x", 0), GetFloat(pos, "y", 1.2f), GetFloat(pos, "z", 0));
+                    if (transform.TryGetProperty("rotation", out var rot)) parsed.HatRotation = new Vector3(GetFloat(rot, "x", 0), GetFloat(rot, "y", 0), GetFloat(rot, "z", 0));
+                    if (transform.TryGetProperty("scale", out var scale)) parsed.HatScale = new Vector3(GetFloat(scale, "x", 1), GetFloat(scale, "y", 1), GetFloat(scale, "z", 1));
+                }
+                avatar.Items.Add(parsed);
+            }
+        }
+        return avatar;
     }
 
     public static void EnsurePlayable(NovusMap map)

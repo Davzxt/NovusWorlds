@@ -71,7 +71,7 @@ Importante: o servidor Godot atual usa ENet/UDP. Render Web Service gratuito e b
 
 ## Client, Studio e Server Godot
 
-O caminho com client Roblox antigo/Novetus foi substituido por projetos proprios em Godot .NET:
+O client e o Studio agora sao projetos proprios em Godot .NET:
 
 ```text
 godot-client/  Player nativo, carrega mapa da API, usa r6.gltf e conecta no servidor Godot
@@ -98,7 +98,7 @@ Observacao: o Godot instalado e x64, entao os scripts definem `DOTNET_ROOT` para
 
 O client tambem foi preparado para Android com preset `Android` em `godot-client/export_presets.cfg` e controles touch. A exportacao precisa de Android SDK/JDK/NDK/CMake configurados no Godot. O Godot 4.6.2 .NET ainda marcou Android/C# como experimental e bloqueou o APK neste ambiente; veja `tools/export-godot-android.md`.
 
-Os endpoints `/api/legacy/place/:id` e `/api/legacy/studio-project` continuam existindo por enquanto como API de compatibilidade para entregar mapas JSON aos apps Godot.
+Os endpoints `/api/legacy/place/:id` e `/api/legacy/studio-project` continuam existindo como API de tickets e mapas JSON para os apps Godot.
 
 ## Aviso importante sobre Render gratuito
 

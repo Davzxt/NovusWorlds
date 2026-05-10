@@ -32,7 +32,7 @@ function Pick-Exe($title, $targetBox) {
 
 function Pick-ClientFolder($targetBox) {
   $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-  $dialog.Description = "Escolha a pasta do client Novetus, por exemplo clients\2011M"
+  $dialog.Description = "Escolha a pasta onde esta o NovusWorldsClient.exe"
   if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
     $targetBox.Text = $dialog.SelectedPath
   }
@@ -148,7 +148,7 @@ if (!(Test-Path $defaultStudioDir)) { $defaultStudioDir = "" }
 $studioBox = Add-TextBox $form $defaultStudioDir 26 254 500
 $studioBrowse = Add-Button $form "Procurar" 535 252 105 28
 
-$openNovetus = Add-Button $form "Abrir downloads" 26 300 190 32
+$openDownloads = Add-Button $form "Abrir downloads" 26 300 190 32
 $install = Add-Button $form "Instalar Novus Launcher" 230 300 210 32
 $close = Add-Button $form "Fechar" 455 300 90 32
 
@@ -168,7 +168,7 @@ function Log($text) {
 $installBrowse.Add_Click({ Pick-Folder $installBox })
 $playerBrowse.Add_Click({ Pick-Exe "Escolha NovusWorldsClient.exe" $playerBox })
 $studioBrowse.Add_Click({ Pick-Exe "Escolha NovusWorldsStudio.exe" $studioBox })
-$openNovetus.Add_Click({ Start-Process "https://github.com/Davzxt/NovusWorlds/raw/main/public/download/NovusWorldsClient-Windows.zip" })
+$openDownloads.Add_Click({ Start-Process "https://github.com/Davzxt/NovusWorlds/raw/main/public/download/NovusWorldsClient-Windows.zip" })
 $close.Add_Click({ $form.Close() })
 
 $install.Add_Click({
@@ -223,14 +223,9 @@ $install.Add_Click({
       studioExe = $studioBox.Text.Trim()
       cacheDir = $defaultCacheDir
       launchMode = "live"
-      useNovetusLocalServer = $false
       godotServerHost = "127.0.0.1"
       godotServerPort = 53640
-      novetusPort = 53640
-      clientJoinDelayMs = 1200
-      closeExistingNovetus = $true
       playerArgs = @("auto")
-      serverArgs = @("auto")
       studioArgs = @("auto")
     }
     $configPath = Join-Path $installDir "config.json"
@@ -256,3 +251,4 @@ $install.Add_Click({
 })
 
 [void]$form.ShowDialog()
+

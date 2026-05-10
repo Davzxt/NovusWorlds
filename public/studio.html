@@ -21,8 +21,8 @@
         <p>Use esta area para abrir um projeto existente ou criar um novo mundo no Studio Godot.</p>
         <div id="projectInfo" class="legacy-info">Preparando projeto...</div>
         <div class="legacy-actions">
-          <button id="openStudioBtn">Como abrir</button>
-          <button id="copyBtn" class="secondary">Copiar comando local</button>
+          <button id="openStudioBtn">Abrir Studio</button>
+          <button id="copyBtn" class="secondary">Copiar ticket</button>
           <a class="btn secondary" href="/download.html">Instalar</a>
         </div>
         <p id="status" class="muted"></p>
@@ -38,12 +38,6 @@
       </aside>
     </section>
   </main>
-  <script type="module">
-    import '/js/main.js';
-    const command = `powershell -ExecutionPolicy Bypass -File tools/run-godot-studio.ps1 ${location.origin}`;
-    projectInfo.textContent = 'Abra o Studio Godot local usando o comando abaixo ate a exportacao do instalador novo ficar pronta.';
-    openStudioBtn.onclick = () => { status.textContent = command; };
-    copyBtn.onclick = async () => { await navigator.clipboard.writeText(command); status.textContent = 'Comando copiado.'; };
-  </script>
+  <script type="module" src="/js/legacy-studio-launcher.js"></script>
 </body>
 </html>

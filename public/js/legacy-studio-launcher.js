@@ -17,7 +17,7 @@ async function init() {
   }
   projectInfo.innerHTML = `<b>${esc(title)}</b><br>${esc(description)}`;
   launchData = await api('/api/legacy/studio-tickets', { method: 'POST', body: JSON.stringify({ gameId }) });
-  status.textContent = 'Ticket de Studio criado. Instale o launcher para abrir o Roblox Studio 2012.';
+  status.textContent = 'Ticket de Studio criado. Clique em Abrir Studio para iniciar o app Godot.';
 }
 
 openStudioBtn.onclick = () => {

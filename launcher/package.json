@@ -1,7 +1,7 @@
 {
-  "name": "novus-legacy-launcher",
+  "name": "novus-worlds-launcher",
   "version": "0.1.0",
-  "description": "Local protocol launcher for Novus Worlds Roblox 2012 bridge.",
+  "description": "Local protocol launcher for Novus Worlds Godot client and studio.",
   "main": "launcher.js",
   "scripts": {
     "start": "node launcher.js",
