@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Launcher Antigo - Novus Worlds</title>
+  <link rel="stylesheet" href="/css/global.css">
+</head>
+<body>
+  <div data-header></div>
+  <main class="wrap">
+    <section class="panel">
+      <h1>Launcher Roblox 2012</h1>
+      <p>Este modo substitui o client web. O site apenas cria um ticket e chama o protocolo local <code>novus://join</code>.</p>
+      <h2>O que o launcher precisa fazer</h2>
+      <ol>
+        <li>Registrar o protocolo <code>novus://</code> no Windows.</li>
+        <li>Receber <code>ticket</code>, <code>gameId</code> e <code>baseUrl</code>.</li>
+        <li>Baixar <code>/api/legacy/join-script?ticket=...</code>.</li>
+        <li>Baixar <code>/api/legacy/avatar?ticket=...</code> ou <code>/api/legacy/avatar.xml?ticket=...</code>.</li>
+        <li>Baixar <code>/api/legacy/place/:id</code>.</li>
+        <li>Converter hats GLTF/GLB para mesh/acessorio legado quando necessario.</li>
+        <li>Iniciar o client Roblox 2012 com o join script gerado.</li>
+      </ol>
+      <h2>Endpoints</h2>
+      <pre>/api/legacy/tickets
+/api/legacy/join-script?ticket=...
+/api/legacy/avatar?ticket=...
+/api/legacy/avatar.xml?ticket=...
+/api/legacy/place/1
+/api/legacy/assets/:id</pre>
+    </section>
+  </main>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

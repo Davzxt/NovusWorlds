@@ -1,6 +1,6 @@
 # Novus Worlds
 
-Novus Worlds e uma plataforma web retro inspirada em jogos sociais de 2008. Inclui site, auth, catalogo, avatar R6, Studio 3D, cliente de jogo Three.js, WebSocket multiplayer, painel admin e SQLite.
+Novus Worlds e uma plataforma retro inspirada em jogos sociais de 2008. Inclui site, auth, catalogo, avatar R6, Studio 3D, painel admin, SQLite e modo launcher para client Roblox antigo.
 
 ## Rodar localmente
 
@@ -35,6 +35,35 @@ Conta admin criada automaticamente:
 7. Deploy.
 
 Render usa a variavel `PORT` automaticamente; o servidor ja respeita `process.env.PORT`.
+
+## Modo Client Roblox Antigo
+
+O fluxo de jogo agora e launcher-based. `/game.html?id=X` cria um ticket e tenta abrir:
+
+```text
+novus://join?ticket=...&gameId=...&baseUrl=...
+```
+
+Endpoints para o launcher/client 2012:
+
+```text
+POST /api/legacy/tickets
+GET  /api/legacy/join-script?ticket=...
+GET  /api/legacy/avatar?ticket=...
+GET  /api/legacy/avatar.xml?ticket=...
+GET  /api/legacy/place/:id
+GET  /api/legacy/assets/:id
+```
+
+Compatibilidade:
+
+- Faces sao expostas como textura/decal.
+- Shirts sao expostas como template de camisa.
+- Pants sao expostas como template de calca.
+- R6 e exposto no appearance endpoint para o launcher montar o personagem.
+- Hats GLTF/GLB sao expostos como `modelUrl` + `hatTransform`, mas client Roblox 2008/2012 nao carrega GLTF diretamente. O launcher precisa converter para mesh/acessorio legado ou usar um formato ja compativel.
+
+Render hospeda site/API. O client antigo e o game server precisam de launcher/ambiente Windows separado.
 
 ## Aviso importante sobre Render gratuito
 

@@ -12,6 +12,7 @@ const users = require('./routes/users');
 const admin = require('./routes/admin');
 const economy = require('./routes/economy');
 const forum = require('./routes/forum');
+const legacy = require('./routes/legacy');
 const { attachGameServer } = require('./websocket/gameServer');
 const db = require('./db');
 
@@ -67,6 +68,7 @@ app.use('/api/users', users);
 app.use('/api/admin', admin);
 app.use('/api/economy', economy);
 app.use('/api/forum', forum);
+app.use('/api/legacy', legacy);
 
 app.get('/health', (req, res) => res.json({ ok: true, name: 'Novus Worlds' }));
 app.get('/api/animation-presets', (req, res) => {
