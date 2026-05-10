@@ -3,8 +3,11 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $rawBase = "https://raw.githubusercontent.com/Davzxt/NovusWorlds/main/launcher"
+$repoDownloadBase = "https://github.com/Davzxt/NovusWorlds/raw/main/public/download"
 $defaultInstallDir = Join-Path $env:LOCALAPPDATA "NovusWorlds\Launcher"
 $defaultCacheDir = Join-Path $env:LOCALAPPDATA "NovusWorlds\Cache"
+$defaultClientRoot = Join-Path $env:LOCALAPPDATA "NovusWorlds\Client"
+$defaultStudioRoot = Join-Path $env:LOCALAPPDATA "NovusWorlds\Studio"
 $desktop = [Environment]::GetFolderPath("Desktop")
 
 function Find-Node {
@@ -47,6 +50,23 @@ function Download-File($name, $installDir) {
   $target = Join-Path $installDir $name
   Invoke-WebRequest -Uri "$rawBase/$name" -OutFile $target
   return $target
+}
+
+function Download-Package($url, $target) {
+  Invoke-WebRequest -Uri $url -OutFile $target
+  return $target
+}
+
+function Expand-Package($zip, $targetDir) {
+  if (Test-Path $targetDir) { Remove-Item -Recurse -Force $targetDir }
+  New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+  Expand-Archive -Path $zip -DestinationPath $targetDir -Force
+}
+
+function Find-ExeInFolder($folder, $name) {
+  $hit = Get-ChildItem -Path $folder -Recurse -Filter $name -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($hit) { return $hit.FullName }
+  return ""
 }
 
 function Register-Protocol($scheme, $description, $nodePath, $launcherPath) {
@@ -117,13 +137,13 @@ $installBox = Add-TextBox $form $defaultInstallDir 26 130 500
 $installBrowse = Add-Button $form "Escolher" 535 128 105 28
 
 Add-Label $form "NovusWorldsClient.exe" 26 170 260 20 | Out-Null
-$defaultClientDir = Join-Path $env:LOCALAPPDATA "NovusWorlds\Client\NovusWorldsClient.exe"
+$defaultClientDir = Join-Path $defaultClientRoot "NovusWorldsClient.exe"
 if (!(Test-Path $defaultClientDir)) { $defaultClientDir = "" }
 $playerBox = Add-TextBox $form $defaultClientDir 26 192 500
 $playerBrowse = Add-Button $form "Procurar" 535 190 105 28
 
 Add-Label $form "NovusWorldsStudio.exe" 26 232 260 20 | Out-Null
-$defaultStudioDir = Join-Path $env:LOCALAPPDATA "NovusWorlds\Studio\NovusWorldsStudio.exe"
+$defaultStudioDir = Join-Path $defaultStudioRoot "NovusWorldsStudio.exe"
 if (!(Test-Path $defaultStudioDir)) { $defaultStudioDir = "" }
 $studioBox = Add-TextBox $form $defaultStudioDir 26 254 500
 $studioBrowse = Add-Button $form "Procurar" 535 252 105 28
@@ -159,6 +179,29 @@ $install.Add_Click({
     New-Item -ItemType Directory -Force -Path $installDir | Out-Null
     New-Item -ItemType Directory -Force -Path $defaultCacheDir | Out-Null
     Log "Pasta pronta: $installDir"
+
+    $temp = Join-Path $env:TEMP "NovusWorldsInstall"
+    New-Item -ItemType Directory -Force -Path $temp | Out-Null
+
+    if (-not $playerBox.Text.Trim() -or -not (Test-Path $playerBox.Text.Trim())) {
+      Log "Baixando Novus Client Windows..."
+      $clientZip = Download-Package "$repoDownloadBase/NovusWorldsClient-Windows.zip" (Join-Path $temp "NovusWorldsClient-Windows.zip")
+      Expand-Package $clientZip $defaultClientRoot
+      $clientExe = Find-ExeInFolder $defaultClientRoot "NovusWorldsClient.exe"
+      if (-not $clientExe) { throw "Client baixado, mas NovusWorldsClient.exe nao foi encontrado." }
+      $playerBox.Text = $clientExe
+      Log "Client instalado: $clientExe"
+    }
+
+    if (-not $studioBox.Text.Trim() -or -not (Test-Path $studioBox.Text.Trim())) {
+      Log "Baixando Novus Studio Windows..."
+      $studioZip = Download-Package "$repoDownloadBase/NovusWorldsStudio-Windows.zip" (Join-Path $temp "NovusWorldsStudio-Windows.zip")
+      Expand-Package $studioZip $defaultStudioRoot
+      $studioExe = Find-ExeInFolder $defaultStudioRoot "NovusWorldsStudio.exe"
+      if (-not $studioExe) { throw "Studio baixado, mas NovusWorldsStudio.exe nao foi encontrado." }
+      $studioBox.Text = $studioExe
+      Log "Studio instalado: $studioExe"
+    }
 
     $nodePath = Find-Node
     if (-not $nodePath) {
@@ -199,11 +242,8 @@ $install.Add_Click({
     Log "Protocolos registrados."
 
     Create-Shortcut "Novus Worlds Player.lnk" $nodePath ('"' + $launcherPath + '"') $installDir
-    if ($studioBox.Text.Trim() -and (Test-Path $studioBox.Text.Trim())) {
-      Create-Shortcut "Novus Worlds Studio.lnk" $studioBox.Text.Trim() "" (Split-Path $studioBox.Text.Trim())
-    } else {
-      Create-Shortcut "Novus Worlds Studio.lnk" $nodePath ('"' + $launcherPath + '"') $installDir
-    }
+    Create-Shortcut "Novus Worlds Studio.lnk" $studioBox.Text.Trim() "" (Split-Path $studioBox.Text.Trim())
+    Create-Shortcut "Novus Worlds Client.lnk" $playerBox.Text.Trim() "" (Split-Path $playerBox.Text.Trim())
     Log "Atalhos criados na area de trabalho."
     Log "Concluido. Abra um jogo pelo site para iniciar o Player com ticket."
     [System.Windows.Forms.MessageBox]::Show("Novus Launcher instalado com sucesso.", "Novus Worlds", "OK", "Information") | Out-Null

@@ -60,6 +60,8 @@ O fluxo automatico usa ticket temporario:
 5. No site, abra um jogo e clique em `Jogar`.
 6. O site cria um ticket em `/api/legacy/tickets` e abre o client com `gameId`, `baseUrl`, `serverHost`, `serverPort` e `ticket`.
 
+Modo facil: baixe `Install-NovusWorlds.cmd` em `/download.html`. Ele baixa o launcher, abre o instalador com PowerShell liberado, instala Client e Studio automaticamente em `%LOCALAPPDATA%\NovusWorlds`, registra os protocolos e cria atalhos na area de trabalho.
+
 Variaveis opcionais para o ticket do client Godot:
 
 - `NOVUS_GODOT_HOST`: host do servidor Godot ENet.

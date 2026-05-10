@@ -17,6 +17,7 @@
         <div class="legacy-actions">
           <a class="btn" href="/download/NovusWorldsClient-Windows.zip" download>Baixar Client Windows</a>
           <a class="btn secondary" href="/download/NovusWorldsStudio-Windows.zip" download>Baixar Studio Windows</a>
+          <a class="btn" href="/download/launcher/Install-NovusWorlds.cmd" download>Instalador Automatico</a>
           <a class="btn secondary" href="/download/launcher/NovusLauncherSetup.ps1" download>Baixar Launcher</a>
           <a class="btn secondary" href="/download/NovusGodotProjects.zip" download>Projetos Godot</a>
           <a class="btn secondary" href="/studio.html">Abrir Studio</a>
@@ -24,9 +25,8 @@
         <p class="muted">Os zips Windows contem os executaveis exportados e as pastas de dados necessarias do Godot/.NET. Extraia a pasta inteira antes de abrir.</p>
         <h2>Como usar</h2>
         <ol>
-          <li>Baixe <code>NovusWorldsClient-Windows.zip</code> para jogar no PC.</li>
-          <li>Baixe <code>NovusWorldsStudio-Windows.zip</code> para criar e salvar mapas.</li>
-          <li>Extraia os zips e rode <code>NovusLauncherSetup.ps1</code> para registrar o protocolo <code>novus://</code>.</li>
+          <li>Baixe e abra <code>Install-NovusWorlds.cmd</code>.</li>
+          <li>O instalador baixa Client e Studio, instala em <code>%LOCALAPPDATA%\NovusWorlds</code>, registra <code>novus://</code> e cria atalhos na area de trabalho.</li>
           <li>Depois disso, clique em <code>Jogar</code> na pagina de um jogo para abrir automaticamente com ticket.</li>
           <li>Rode <code>godot-server</code> ou o servidor dedicado exportado para multiplayer pequeno.</li>
           <li>Use <code>npm run godot:export:windows</code> para regerar os executaveis Windows.</li>
