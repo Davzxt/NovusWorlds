@@ -17,6 +17,7 @@
         <div class="legacy-actions">
           <a class="btn" href="/download/NovusWorldsClient-Windows.zip" download>Baixar Client Windows</a>
           <a class="btn secondary" href="/download/NovusWorldsStudio-Windows.zip" download>Baixar Studio Windows</a>
+          <a class="btn secondary" href="/download/launcher/NovusLauncherSetup.ps1" download>Baixar Launcher</a>
           <a class="btn secondary" href="/download/NovusGodotProjects.zip" download>Projetos Godot</a>
           <a class="btn secondary" href="/studio.html">Abrir Studio</a>
         </div>
@@ -25,7 +26,9 @@
         <ol>
           <li>Baixe <code>NovusWorldsClient-Windows.zip</code> para jogar no PC.</li>
           <li>Baixe <code>NovusWorldsStudio-Windows.zip</code> para criar e salvar mapas.</li>
-          <li>Rode <code>godot-server</code> ou o servidor dedicado exportado para multiplayer.</li>
+          <li>Extraia os zips e rode <code>NovusLauncherSetup.ps1</code> para registrar o protocolo <code>novus://</code>.</li>
+          <li>Depois disso, clique em <code>Jogar</code> na pagina de um jogo para abrir automaticamente com ticket.</li>
+          <li>Rode <code>godot-server</code> ou o servidor dedicado exportado para multiplayer pequeno.</li>
           <li>Use <code>npm run godot:export:windows</code> para regerar os executaveis Windows.</li>
           <li>Use <code>npm run godot:export:android</code> para tentar o APK Android quando o export C# Android estiver liberado no ambiente.</li>
         </ol>

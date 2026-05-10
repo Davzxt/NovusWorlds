@@ -10,6 +10,14 @@ function baseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
+function gameServerHost(req) {
+  return process.env.NOVUS_GODOT_HOST || req.hostname || '127.0.0.1';
+}
+
+function gameServerPort() {
+  return Number(process.env.NOVUS_GODOT_PORT || 53640);
+}
+
 function parseJson(value, fallback = {}) {
   try { return JSON.parse(value || ''); } catch { return fallback; }
 }
@@ -93,8 +101,27 @@ router.post('/tickets', (req, res) => {
     ticket,
     gameId,
     username: user.username,
-    protocolUrl: `novus://join?ticket=${ticket}&gameId=${gameId}&baseUrl=${encodeURIComponent(baseUrl(req))}`,
+    serverHost: gameServerHost(req),
+    serverPort: gameServerPort(),
+    protocolUrl: `novus://join?ticket=${ticket}&gameId=${gameId}&baseUrl=${encodeURIComponent(baseUrl(req))}&server=${encodeURIComponent(gameServerHost(req))}&port=${gameServerPort()}`,
     joinScriptUrl: `${baseUrl(req)}/api/legacy/join-script?ticket=${ticket}`
+  });
+});
+
+router.get('/tickets/:ticket', (req, res) => {
+  const ticket = String(req.params.ticket || '');
+  const entry = tickets.get(ticket);
+  if (!entry || Date.now() - entry.createdAt > TICKET_TTL_MS) return res.status(403).json({ error: 'Ticket invalido.' });
+  const user = entry.userId ? db.prepare('SELECT * FROM users WHERE id = ?').get(entry.userId) : getUserByRequest(req);
+  res.json({
+    ticket,
+    gameId: entry.gameId,
+    username: entry.username,
+    baseUrl: baseUrl(req),
+    serverHost: gameServerHost(req),
+    serverPort: gameServerPort(),
+    avatar: getResolvedAvatar(user, req),
+    placeUrl: `${baseUrl(req)}/api/legacy/place/${entry.gameId}`
   });
 });
 

@@ -49,6 +49,24 @@ O WebSocket do jogo roda no mesmo Web Service Express, em `/ws/game/:gameId`. Is
 
 Como o estado das salas fica em memoria, nao use varias instancias Render free ao mesmo tempo. Para escalar de verdade, mova o realtime para um servico dedicado com estado compartilhado ou Durable Objects por sala.
 
+## Entrar em um jogo pelo Client nativo
+
+O fluxo automatico usa ticket temporario:
+
+1. Baixe e extraia `NovusWorldsClient-Windows.zip`.
+2. Baixe e rode `NovusLauncherSetup.ps1`.
+3. No instalador, selecione `NovusWorldsClient.exe` e `NovusWorldsStudio.exe`.
+4. O instalador registra `novus://` e `novus-studio://` no Windows.
+5. No site, abra um jogo e clique em `Jogar`.
+6. O site cria um ticket em `/api/legacy/tickets` e abre o client com `gameId`, `baseUrl`, `serverHost`, `serverPort` e `ticket`.
+
+Variaveis opcionais para o ticket do client Godot:
+
+- `NOVUS_GODOT_HOST`: host do servidor Godot ENet.
+- `NOVUS_GODOT_PORT`: porta do servidor Godot ENet, padrao `53640`.
+
+Importante: o servidor Godot atual usa ENet/UDP. Render Web Service gratuito e bom para o site e WebSocket do navegador, mas normalmente nao expõe UDP publico para ENet. Para multiplayer do client nativo pela internet, use um host com UDP liberado ou troque o transporte do client Godot para WebSocket.
+
 ## Client, Studio e Server Godot
 
 O caminho com client Roblox antigo/Novetus foi substituido por projetos proprios em Godot .NET:

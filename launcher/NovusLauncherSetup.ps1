@@ -110,23 +110,25 @@ $form.Font = New-Object System.Drawing.Font("Verdana", 9)
 $title = Add-Label $form "Novus Worlds Launcher" 24 18 620 30
 $title.Font = New-Object System.Drawing.Font("Verdana", 16, [System.Drawing.FontStyle]::Bold)
 $title.ForeColor = [System.Drawing.Color]::FromArgb(20, 80, 150)
-Add-Label $form "Configure a ponte local para abrir jogos e Studio pelo Novetus. O instalador nao inclui executaveis proprietarios." 26 54 610 38 | Out-Null
+Add-Label $form "Configure a ponte local para abrir jogos e Studio pelo Novus Client Godot. Baixe e extraia os zips Windows antes de instalar." 26 54 610 38 | Out-Null
 
 Add-Label $form "Pasta de instalacao" 26 108 200 20 | Out-Null
 $installBox = Add-TextBox $form $defaultInstallDir 26 130 500
 $installBrowse = Add-Button $form "Escolher" 535 128 105 28
 
-Add-Label $form "Player/Client do Novetus" 26 170 260 20 | Out-Null
-$defaultClientDir = "C:\Users\Administrator\Downloads\novetus-windows\clients\2011M"
+Add-Label $form "NovusWorldsClient.exe" 26 170 260 20 | Out-Null
+$defaultClientDir = Join-Path $env:LOCALAPPDATA "NovusWorlds\Client\NovusWorldsClient.exe"
 if (!(Test-Path $defaultClientDir)) { $defaultClientDir = "" }
 $playerBox = Add-TextBox $form $defaultClientDir 26 192 500
 $playerBrowse = Add-Button $form "Procurar" 535 190 105 28
 
-Add-Label $form "Studio do Novetus" 26 232 260 20 | Out-Null
-$studioBox = Add-TextBox $form $defaultClientDir 26 254 500
+Add-Label $form "NovusWorldsStudio.exe" 26 232 260 20 | Out-Null
+$defaultStudioDir = Join-Path $env:LOCALAPPDATA "NovusWorlds\Studio\NovusWorldsStudio.exe"
+if (!(Test-Path $defaultStudioDir)) { $defaultStudioDir = "" }
+$studioBox = Add-TextBox $form $defaultStudioDir 26 254 500
 $studioBrowse = Add-Button $form "Procurar" 535 252 105 28
 
-$openNovetus = Add-Button $form "Abrir pagina do Novetus" 26 300 190 32
+$openNovetus = Add-Button $form "Abrir downloads" 26 300 190 32
 $install = Add-Button $form "Instalar Novus Launcher" 230 300 210 32
 $close = Add-Button $form "Fechar" 455 300 90 32
 
@@ -144,9 +146,9 @@ function Log($text) {
 }
 
 $installBrowse.Add_Click({ Pick-Folder $installBox })
-$playerBrowse.Add_Click({ Pick-ClientFolder $playerBox })
-$studioBrowse.Add_Click({ Pick-ClientFolder $studioBox })
-$openNovetus.Add_Click({ Start-Process "https://github.com/Novetus/Novetus_src" })
+$playerBrowse.Add_Click({ Pick-Exe "Escolha NovusWorldsClient.exe" $playerBox })
+$studioBrowse.Add_Click({ Pick-Exe "Escolha NovusWorldsStudio.exe" $studioBox })
+$openNovetus.Add_Click({ Start-Process "https://github.com/Davzxt/NovusWorlds/raw/main/public/download/NovusWorldsClient-Windows.zip" })
 $close.Add_Click({ $form.Close() })
 
 $install.Add_Click({
@@ -178,9 +180,11 @@ $install.Add_Click({
       studioExe = $studioBox.Text.Trim()
       cacheDir = $defaultCacheDir
       launchMode = "live"
-      useNovetusLocalServer = $true
+      useNovetusLocalServer = $false
+      godotServerHost = "127.0.0.1"
+      godotServerPort = 53640
       novetusPort = 53640
-      clientJoinDelayMs = 4500
+      clientJoinDelayMs = 1200
       closeExistingNovetus = $true
       playerArgs = @("auto")
       serverArgs = @("auto")

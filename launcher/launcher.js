@@ -38,6 +38,8 @@ async function joinGame() {
   const ticket = need('ticket');
   const baseUrl = need('baseUrl');
   const gameId = need('gameId');
+  const serverHost = uri.searchParams.get('server') || config.godotServerHost || '127.0.0.1';
+  const serverPort = uri.searchParams.get('port') || config.godotServerPort || config.novetusPort || 53640;
   const joinScript = await text(`${baseUrl}/api/legacy/join-script?ticket=${encodeURIComponent(ticket)}`);
   const avatar = await json(`${baseUrl}/api/legacy/avatar?ticket=${encodeURIComponent(ticket)}`);
   const place = await json(`${baseUrl}/api/legacy/place/${encodeURIComponent(gameId)}`);
@@ -59,6 +61,11 @@ async function joinGame() {
     avatarScript,
     placeJson: placePath,
     placeFile,
+    ticket,
+    gameId,
+    baseUrl,
+    serverHost,
+    serverPort,
     novetusSoloScript: novetusSoloScript(avatar.avatar || {}, target),
     novetusClientScript: novetusClientScript(avatar.avatar || {}, target),
     novetusServerScript: novetusServerScript(serverTarget, serverBootstrap)
@@ -80,7 +87,7 @@ async function openStudio() {
   const projectPath = write(`studio-project-${project.gameId || 'new'}.json`, JSON.stringify(project, null, 2));
   const placeFile = write(`studio-project-${project.gameId || 'new'}.rbxl`, mapToRbxlx(normalizePlayableMap(project.map || {}), project.title || 'Novo Mundo'));
   const target = resolveExecutable(config.studioExe, 'studio');
-  const args = applyArgs(chooseTemplate('studio', config.studioArgs, target.exe), { projectJson: projectPath, placeFile, novetusStudioScript: novetusStudioScript(target) });
+  const args = applyArgs(chooseTemplate('studio', config.studioArgs, target.exe), { ticket, baseUrl, projectJson: projectPath, placeFile, novetusStudioScript: novetusStudioScript(target) });
   console.log(`Downloaded studio project:\n${projectPath}\n${placeFile}`);
   launch(target, args, 'studio');
 }
@@ -166,6 +173,12 @@ function psQuote(value) {
 
 function chooseTemplate(kind, template, exe) {
   const current = Array.isArray(template) ? template : ['auto'];
+  if (isGodotClientExe(exe) && kind === 'player' && current.includes('auto')) {
+    return ['--game', '{gameId}', '--base-url', '{baseUrl}', '--server', '{serverHost}', '--port', '{serverPort}', '--ticket', '{ticket}'];
+  }
+  if (isGodotStudioExe(exe) && kind === 'studio' && current.includes('auto')) {
+    return ['--base-url', '{baseUrl}', '--ticket', '{ticket}', '--project', '{projectJson}'];
+  }
   if (isNovetusExe(exe) && (current.includes('auto') || isOldDefaultTemplate(kind, current))) {
     if (kind === 'studio') return ['-script', '{novetusStudioScript}', '{placeFile}'];
     if (kind === 'server') return ['-script', '{novetusServerScript}', '-no3d', '{placeFile}'];
@@ -183,6 +196,14 @@ function isOldDefaultTemplate(kind, template) {
 
 function isNovetusExe(exe) {
   return /RobloxApp_(solo|client|studio|server)\.exe$/i.test(String(exe || ''));
+}
+
+function isGodotClientExe(exe) {
+  return /NovusWorldsClient\.exe$/i.test(String(exe || ''));
+}
+
+function isGodotStudioExe(exe) {
+  return /NovusWorldsStudio\.exe$/i.test(String(exe || ''));
 }
 
 function novetusSoloScript(avatar, target) {
@@ -317,10 +338,10 @@ function resolveExecutable(value, label) {
   if (fs.existsSync(raw) && fs.statSync(raw).isFile()) return { exe: raw, cwd: path.dirname(raw) };
   if (fs.existsSync(raw) && fs.statSync(raw).isDirectory()) {
     const candidates = label === 'studio'
-      ? ['RobloxApp_studio.exe', 'RobloxStudioBeta.exe', 'Novetus.exe']
+      ? ['NovusWorldsStudio.exe', 'RobloxApp_studio.exe', 'RobloxStudioBeta.exe', 'Novetus.exe']
       : label === 'server'
         ? ['RobloxApp_server.exe', 'RobloxApp_solo.exe', 'Novetus.exe']
-        : ['RobloxApp_client.exe', 'RobloxPlayerBeta.exe', 'RobloxApp_solo.exe', 'Novetus.exe'];
+        : ['NovusWorldsClient.exe', 'RobloxApp_client.exe', 'RobloxPlayerBeta.exe', 'RobloxApp_solo.exe', 'Novetus.exe'];
     for (const name of candidates) {
       const candidate = path.join(raw, name);
       if (fs.existsSync(candidate)) return { exe: candidate, cwd: raw };
