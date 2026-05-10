@@ -69,13 +69,14 @@ powershell -ExecutionPolicy Bypass -File tools/run-godot-studio.ps1 http://local
 powershell -ExecutionPolicy Bypass -File tools/install-godot-export-templates.ps1
 powershell -ExecutionPolicy Bypass -File tools/export-godot-windows.ps1
 powershell -ExecutionPolicy Bypass -File tools/export-godot-server-linux.ps1
+powershell -ExecutionPolicy Bypass -File tools/export-godot-android.ps1
 ```
 
-Observacao: o Godot instalado e x64, entao os scripts definem `DOTNET_ROOT` para `%USERPROFILE%\.dotnet-x64`, onde fica o SDK x64 local.
+Observacao: o Godot instalado e x64, entao os scripts definem `DOTNET_ROOT` para `%USERPROFILE%\.dotnet9-x64`, onde fica o SDK .NET 9 x64 local usado pelo Godot 4.6.2.
 
-### iOS
+### Android
 
-O client tambem foi preparado para iOS com preset `iOS` em `godot-client/export_presets.cfg` e controles touch. Segundo a documentacao oficial do Godot 4.6, C# em iOS e suportado desde Godot 4.2, mas ainda e experimental; a exportacao para iOS precisa ser feita em um Mac com Xcode instalado. Veja `tools/export-godot-ios.md`.
+O client tambem foi preparado para Android com preset `Android` em `godot-client/export_presets.cfg` e controles touch. A exportacao precisa de Android SDK/JDK/NDK/CMake configurados no Godot. O Godot 4.6.2 .NET ainda marcou Android/C# como experimental e bloqueou o APK neste ambiente; veja `tools/export-godot-android.md`.
 
 Os endpoints `/api/legacy/place/:id` e `/api/legacy/studio-project` continuam existindo por enquanto como API de compatibilidade para entregar mapas JSON aos apps Godot.
 

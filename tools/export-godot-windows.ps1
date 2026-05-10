@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$env:DOTNET_ROOT = Join-Path $env:USERPROFILE ".dotnet-x64"
+$env:DOTNET_ROOT = Join-Path $env:USERPROFILE ".dotnet9-x64"
 $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
 $godot = "C:\Users\Administrator\Downloads\Godot_v4.6.2-stable_mono_win64\Godot_v4.6.2-stable_mono_win64\Godot_v4.6.2-stable_mono_win64_console.exe"
 New-Item -ItemType Directory -Force (Join-Path $root "build\client") | Out-Null
@@ -14,3 +14,4 @@ if (!(Test-Path $clientExe) -or !(Test-Path $studioExe)) {
 }
 Write-Host "Exported $clientExe"
 Write-Host "Exported $studioExe"
+

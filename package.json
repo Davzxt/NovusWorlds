@@ -14,6 +14,7 @@
     "godot:studio": "powershell -ExecutionPolicy Bypass -File tools/run-godot-studio.ps1",
     "godot:export:windows": "powershell -ExecutionPolicy Bypass -File tools/export-godot-windows.ps1",
     "godot:export:server": "powershell -ExecutionPolicy Bypass -File tools/export-godot-server-linux.ps1",
+    "godot:export:android": "powershell -ExecutionPolicy Bypass -File tools/export-godot-android.ps1",
     "godot:templates": "powershell -ExecutionPolicy Bypass -File tools/install-godot-export-templates.ps1"
   },
   "dependencies": {
