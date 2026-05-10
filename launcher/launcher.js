@@ -49,6 +49,7 @@ async function joinGame() {
   const placeFile = write(`place-${gameId}.rbxl`, mapToRbxlx(place.map || {}, place.title || `Place ${gameId}`));
   const avatarScript = write('avatar-appearance.lua', avatarToLua(avatar.avatar || {}, avatarAssets));
   const target = resolveExecutable(config.playerExe, 'player');
+  const serverTarget = resolveExecutable(config.serverExe || config.playerExe, 'server');
   const values = {
     joinScript: joinPath,
     avatarJson: avatarPath,
@@ -56,10 +57,16 @@ async function joinGame() {
     avatarScript,
     placeJson: placePath,
     placeFile,
-    novetusSoloScript: novetusSoloScript(avatar.avatar || {}, target)
+    novetusSoloScript: novetusSoloScript(avatar.avatar || {}, target),
+    novetusClientScript: novetusClientScript(avatar.avatar || {}, target),
+    novetusServerScript: novetusServerScript(serverTarget)
   };
-  const args = applyArgs(chooseTemplate('player', config.playerArgs, target.exe), values);
   console.log(`Downloaded join data:\n${joinPath}\n${avatarPath}\n${avatarAssetsPath}\n${placePath}\n${placeFile}\n${avatarScript}`);
+  if (isNovetusExe(target.exe) && isNovetusExe(serverTarget.exe) && config.useNovetusLocalServer !== false) {
+    launch(serverTarget, applyArgs(chooseTemplate('server', config.serverArgs, serverTarget.exe), values), 'server');
+    return setTimeout(() => launch(target, applyArgs(chooseTemplate('player', config.playerArgs, target.exe), values), 'player'), Number(config.clientJoinDelayMs || 1800));
+  }
+  const args = applyArgs(chooseTemplate('player', config.playerArgs, target.exe), values);
   launch(target, args, 'player');
 }
 
@@ -110,9 +117,9 @@ function cmdQuote(value) {
 function chooseTemplate(kind, template, exe) {
   const current = Array.isArray(template) ? template : ['auto'];
   if (isNovetusExe(exe) && (current.includes('auto') || isOldDefaultTemplate(kind, current))) {
-    return kind === 'studio'
-      ? ['-script', '{novetusStudioScript}', '{placeFile}']
-      : ['-script', '{novetusSoloScript}', '{placeFile}'];
+    if (kind === 'studio') return ['-script', '{novetusStudioScript}', '{placeFile}'];
+    if (kind === 'server') return ['-script', '{novetusServerScript}', '{placeFile}'];
+    return ['-script', '{novetusClientScript}'];
   }
   if (current.includes('auto')) return kind === 'studio' ? ['{placeFile}'] : ['{joinScript}', '{placeFile}'];
   return current;
@@ -120,6 +127,7 @@ function chooseTemplate(kind, template, exe) {
 
 function isOldDefaultTemplate(kind, template) {
   const joined = template.join('|');
+  if (kind === 'server') return joined === '{placeFile}';
   return kind === 'studio' ? joined === '{placeFile}' : joined === '{joinScript}|{placeFile}';
 }
 
@@ -143,6 +151,26 @@ function novetusStudioScript(target) {
   return `dofile('${lua(novetusScriptPath(target))}'); _G.CSStudio(true)`;
 }
 
+function novetusServerScript(target) {
+  return `dofile('${lua(novetusScriptPath(target))}'); _G.CSServer(${novetusPort()},20,'','','',false,0,true)`;
+}
+
+function novetusClientScript(avatar, target) {
+  const userId = Number(avatar.userId || 1) || 1;
+  const username = lua(avatar.username || 'NovusPlayer');
+  const colors = avatar.colors || {};
+  const scriptPath = lua(novetusScriptPath(target));
+  const head = brick(colors.head, 24);
+  const torso = brick(colors.torso, 23);
+  const arms = brick(colors.arms, 24);
+  const legs = brick(colors.legs, 26);
+  return `dofile('${scriptPath}'); _G.CSConnect(${userId},'127.0.0.1',${novetusPort()},'${username}',0,0,0,${head},${torso},${arms},${arms},${legs},${legs},0,0,0,0,0,'NBC',0,'','','','',0,true,'')`;
+}
+
+function novetusPort() {
+  return Number(config.novetusPort || 53640);
+}
+
 function novetusScriptPath(target) {
   const local = path.join(target.cwd || '', 'content', 'scripts', 'CSMPFunctions.lua');
   if (fs.existsSync(local)) return local.replace(/\\/g, '/');
@@ -156,7 +184,9 @@ function resolveExecutable(value, label) {
   if (fs.existsSync(raw) && fs.statSync(raw).isDirectory()) {
     const candidates = label === 'studio'
       ? ['RobloxApp_studio.exe', 'RobloxStudioBeta.exe', 'Novetus.exe']
-      : ['RobloxApp_solo.exe', 'RobloxApp_client.exe', 'RobloxPlayerBeta.exe', 'Novetus.exe'];
+      : label === 'server'
+        ? ['RobloxApp_server.exe', 'RobloxApp_solo.exe', 'Novetus.exe']
+        : ['RobloxApp_client.exe', 'RobloxPlayerBeta.exe', 'RobloxApp_solo.exe', 'Novetus.exe'];
     for (const name of candidates) {
       const candidate = path.join(raw, name);
       if (fs.existsSync(candidate)) return { exe: candidate, cwd: raw };

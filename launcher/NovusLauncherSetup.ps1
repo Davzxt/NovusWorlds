@@ -178,7 +178,11 @@ $install.Add_Click({
       studioExe = $studioBox.Text.Trim()
       cacheDir = $defaultCacheDir
       launchMode = "live"
+      useNovetusLocalServer = $true
+      novetusPort = 53640
+      clientJoinDelayMs = 1800
       playerArgs = @("auto")
+      serverArgs = @("auto")
       studioArgs = @("auto")
     }
     $configPath = Join-Path $installDir "config.json"

@@ -3,6 +3,10 @@
   "studioExe": "C:\\\\Novus2012\\\\RobloxStudioBeta.exe",
   "cacheDir": "%LOCALAPPDATA%\\\\NovusWorlds\\\\Cache",
   "launchMode": "dry-run",
+  "useNovetusLocalServer": true,
+  "novetusPort": 53640,
+  "clientJoinDelayMs": 1800,
   "playerArgs": ["auto"],
+  "serverArgs": ["auto"],
   "studioArgs": ["auto"]
 }
