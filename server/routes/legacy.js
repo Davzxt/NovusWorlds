@@ -15,8 +15,12 @@ function parseJson(value, fallback = {}) {
 
 function absolute(req, url) {
   if (!url) return null;
-  if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
-  return baseUrl(req) + url;
+  const value = String(url).trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value;
+  if (value.startsWith('/')) return baseUrl(req) + value;
+  if (/^(face|hat|shirt|pants|head)-[A-Za-z0-9_-]+$/i.test(value)) return null;
+  return `${baseUrl(req)}/${value.replace(/^\/+/, '')}`;
 }
 
 function legacyType(item) {

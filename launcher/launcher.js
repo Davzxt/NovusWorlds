@@ -223,8 +223,8 @@ async function cacheAvatarAssets(avatar) {
   for (const item of items) {
     const cached = { id: item.id, type: item.type, name: item.name, textureUrl: item.textureUrl || '', modelUrl: item.modelUrl || '', texturePath: '', modelPath: '', hatTransform: item.hatTransform || {} };
     if (item.textureUrl?.startsWith('data:')) cached.texturePath = writeDataUrl(item.textureUrl, `item-${item.id}-texture.png`);
-    else if (item.textureUrl) cached.texturePath = await downloadAsset(item.textureUrl, `item-${item.id}-texture`);
-    if (item.modelUrl && !item.modelUrl.startsWith('data:')) cached.modelPath = await downloadAsset(item.modelUrl, `item-${item.id}-model`);
+    else if (isFetchableAsset(item.textureUrl)) cached.texturePath = await downloadAsset(item.textureUrl, `item-${item.id}-texture`);
+    if (isFetchableAsset(item.modelUrl)) cached.modelPath = await downloadAsset(item.modelUrl, `item-${item.id}-model`);
     assets.push(cached);
   }
   return assets;
@@ -243,6 +243,10 @@ async function downloadAsset(url, prefix) {
     console.warn(`Could not cache asset ${url}: ${err.message}`);
     return url;
   }
+}
+
+function isFetchableAsset(url) {
+  return /^https?:\/\//i.test(String(url || ''));
 }
 
 function writeDataUrl(dataUrl, name) {
