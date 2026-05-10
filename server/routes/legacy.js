@@ -62,6 +62,7 @@ function getResolvedAvatar(user, req) {
     userId: user.id,
     username: user.username,
     rig: 'R6',
+    face: avatar.face || 'happy',
     colors: avatar.colors || { head: '#f5cd30', torso: '#0d69ac', arms: '#f5cd30', legs: '#1b2a35' },
     items: items.map(item => ({
       id: item.id,

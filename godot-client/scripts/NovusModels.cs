@@ -27,6 +27,7 @@ public sealed class NovusPart
 public sealed class NovusAvatar
 {
     public string Username = "NovusPlayer";
+    public string Face = "happy";
     public Color HeadColor = new(0.96f, 0.8f, 0.19f);
     public Color TorsoColor = new(0.05f, 0.41f, 0.67f);
     public Color ArmsColor = new(0.96f, 0.8f, 0.19f);

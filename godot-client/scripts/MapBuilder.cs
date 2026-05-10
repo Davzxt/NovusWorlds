@@ -16,9 +16,12 @@ public static class MapBuilder
 
             var mesh = new MeshInstance3D();
             mesh.Mesh = part.Type == "Sphere" ? new SphereMesh { Radius = Mathf.Max(Mathf.Max(part.Size.X, part.Size.Y), part.Size.Z) / 2f } : new BoxMesh { Size = part.Size };
+            var displayColor = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase)
+                ? new Color(0.25f, 0.45f, 0.25f)
+                : part.Color;
             var material = new StandardMaterial3D
             {
-                AlbedoColor = new Color(part.Color.R, part.Color.G, part.Color.B, 1f - part.Transparency),
+                AlbedoColor = new Color(displayColor.R, displayColor.G, displayColor.B, 1f - part.Transparency),
                 Roughness = part.Material == "Metal" ? 0.25f : 0.8f,
                 Metallic = part.Material == "Metal" ? 0.8f : 0f
             };
@@ -34,7 +37,7 @@ public static class MapBuilder
             }
             root.AddChild(body);
             if (part.Size.X >= 12 && part.Size.Z >= 12 && part.Transparency <= 0.05f)
-                AddStuds(body, part);
+                AddStuds(body, part, displayColor);
         }
         return root;
     }
@@ -49,11 +52,11 @@ public static class MapBuilder
         map.Objects.Add(new NovusPart { Id = "stairs-3", Name = "Classic Step 3", Position = new Vector3(24, 2.5f, 24), Size = new Vector3(6, 1, 6), Color = new Color(0.45f, 0.25f, 0.12f), Material = "Plastic" });
     }
 
-    private static void AddStuds(Node3D body, NovusPart part)
+    private static void AddStuds(Node3D body, NovusPart part, Color displayColor)
     {
         var sx = Mathf.Min(28, Mathf.Max(2, Mathf.FloorToInt(part.Size.X / 4f)));
         var sz = Mathf.Min(28, Mathf.Max(2, Mathf.FloorToInt(part.Size.Z / 4f)));
-        var mat = new StandardMaterial3D { AlbedoColor = part.Color.Darkened(0.18f), Roughness = 0.9f };
+        var mat = new StandardMaterial3D { AlbedoColor = displayColor.Lightened(0.18f), Roughness = 0.82f };
         for (var x = 0; x < sx; x++)
         for (var z = 0; z < sz; z++)
         {

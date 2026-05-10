@@ -2,8 +2,8 @@ using Godot;
 
 public partial class R6Character : CharacterBody3D
 {
-    [Export] public float WalkSpeed = 13f;
-    [Export] public float JumpVelocity = 9.2f;
+    [Export] public float WalkSpeed = 8.5f;
+    [Export] public float JumpVelocity = 8.4f;
     [Export] public bool IsRemote;
 
     public Vector2 MobileMove { get; set; }
@@ -16,6 +16,7 @@ public partial class R6Character : CharacterBody3D
     private float animClock;
     private string animState = "idle";
     private Label3D bubble = null!;
+    private Label3D nameLabel = null!;
     private MeshInstance3D forceField = null!;
 
     public override void _Ready()
@@ -26,6 +27,7 @@ public partial class R6Character : CharacterBody3D
         anim = CreateAnimations();
         visual.AddChild(anim);
         ApplyAvatarColors();
+        AddNameLabel();
         AddBubble();
         AddForceField();
     }
@@ -70,7 +72,11 @@ public partial class R6Character : CharacterBody3D
     public void SetAvatar(NovusAvatar nextAvatar)
     {
         avatar = nextAvatar ?? new NovusAvatar();
-        if (visual != null) ApplyAvatarColors();
+        if (visual != null)
+        {
+            ApplyAvatarColors();
+            if (nameLabel != null) nameLabel.Text = avatar.Username;
+        }
     }
 
     public void SetRemoteAnimation(string animation)
@@ -79,6 +85,12 @@ public partial class R6Character : CharacterBody3D
     }
 
     public string CurrentAnimation => animState;
+
+    public void SetDisplayName(string username)
+    {
+        avatar.Username = string.IsNullOrWhiteSpace(username) ? avatar.Username : username;
+        if (nameLabel != null) nameLabel.Text = avatar.Username;
+    }
 
     public void ShowChatBubble(string message)
     {
@@ -95,15 +107,14 @@ public partial class R6Character : CharacterBody3D
 
     private Node3D CreateVisual()
     {
-        var model = GD.Load<PackedScene>("res://assets/r6/r6.gltf");
-        if (model != null) return model.Instantiate<Node3D>();
-        var root = new Node3D { Name = "R6Fallback" };
-        AddBlock(root, "Torso", new Vector3(0, 1.8f, 0), new Vector3(2, 2, 1), new Color(0.05f, 0.41f, 0.67f));
-        AddBlock(root, "Head", new Vector3(0, 3.2f, 0), new Vector3(1.2f, 1.2f, 1.2f), new Color(0.96f, 0.8f, 0.19f));
-        AddBlock(root, "LeftArm", new Vector3(-1.55f, 1.8f, 0), new Vector3(0.7f, 2, 0.8f), new Color(0.96f, 0.8f, 0.19f));
-        AddBlock(root, "RightArm", new Vector3(1.55f, 1.8f, 0), new Vector3(0.7f, 2, 0.8f), new Color(0.96f, 0.8f, 0.19f));
-        AddBlock(root, "LeftLeg", new Vector3(-0.5f, 0.55f, 0), new Vector3(0.8f, 1.6f, 0.8f), new Color(0.1f, 0.16f, 0.21f));
-        AddBlock(root, "RightLeg", new Vector3(0.5f, 0.55f, 0), new Vector3(0.8f, 1.6f, 0.8f), new Color(0.1f, 0.16f, 0.21f));
+        var root = new Node3D { Name = "ClassicR6" };
+        AddBlock(root, "Torso", new Vector3(0, 2.1f, 0), new Vector3(2, 2, 1), new Color(0.05f, 0.41f, 0.67f));
+        AddPivotBlock(root, "Head", new Vector3(0, 3.65f, 0), Vector3.Zero, new Vector3(1.25f, 1.25f, 1.25f), new Color(0.96f, 0.8f, 0.19f));
+        AddPivotBlock(root, "LeftArm", new Vector3(-1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f));
+        AddPivotBlock(root, "RightArm", new Vector3(1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f));
+        AddPivotBlock(root, "LeftLeg", new Vector3(-0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f));
+        AddPivotBlock(root, "RightLeg", new Vector3(0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f));
+        AddFace(root);
         return root;
     }
 
@@ -114,6 +125,30 @@ public partial class R6Character : CharacterBody3D
         root.AddChild(mesh);
     }
 
+    private static void AddPivotBlock(Node root, string name, Vector3 pivotPos, Vector3 meshOffset, Vector3 size, Color color)
+    {
+        var pivot = new Node3D { Name = name, Position = pivotPos };
+        var mesh = new MeshInstance3D { Name = $"{name}Mesh", Position = meshOffset, Mesh = new BoxMesh { Size = size } };
+        mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.68f };
+        pivot.AddChild(mesh);
+        root.AddChild(pivot);
+    }
+
+    private static void AddFace(Node3D root)
+    {
+        var head = root.FindChild("Head", true, false) as Node3D;
+        if (head == null) return;
+        var black = new StandardMaterial3D { AlbedoColor = Colors.Black, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        AddFacePiece(head, "LeftEye", new Vector3(-0.24f, 0.12f, -0.64f), new Vector3(0.08f, 0.18f, 0.025f), black);
+        AddFacePiece(head, "RightEye", new Vector3(0.24f, 0.12f, -0.64f), new Vector3(0.08f, 0.18f, 0.025f), black);
+        AddFacePiece(head, "Mouth", new Vector3(0, -0.22f, -0.64f), new Vector3(0.44f, 0.08f, 0.025f), black);
+    }
+
+    private static void AddFacePiece(Node3D parent, string name, Vector3 pos, Vector3 size, Material mat)
+    {
+        parent.AddChild(new MeshInstance3D { Name = name, Position = pos, Mesh = new BoxMesh { Size = size }, MaterialOverride = mat });
+    }
+
     private void ApplyAvatarColors()
     {
         TintPart("Head", avatar.HeadColor);
@@ -122,8 +157,25 @@ public partial class R6Character : CharacterBody3D
         TintPart("RightArm", avatar.ArmsColor);
         TintPart("LeftLeg", avatar.LegsColor);
         TintPart("RightLeg", avatar.LegsColor);
+        ApplyFace();
         foreach (var item in avatar.Items)
             if (item.Type == "hat") AddHatMarker(item);
+    }
+
+    private void AddNameLabel()
+    {
+        nameLabel = new Label3D
+        {
+            Name = "NameLabel",
+            Text = avatar.Username,
+            Position = new Vector3(0, 5.02f, 0),
+            PixelSize = 0.014f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Modulate = Colors.White,
+            OutlineModulate = Colors.Black,
+            OutlineSize = 6
+        };
+        AddChild(nameLabel);
     }
 
     private void AddBubble()
@@ -133,7 +185,7 @@ public partial class R6Character : CharacterBody3D
             Name = "ChatBubble",
             Text = "",
             Visible = false,
-            Position = new Vector3(0, 5.3f, 0),
+            Position = new Vector3(0, 5.45f, 0),
             PixelSize = 0.018f,
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             Modulate = Colors.White,
@@ -168,6 +220,19 @@ public partial class R6Character : CharacterBody3D
         var node = visual.FindChild(name, true, false);
         if (node is MeshInstance3D mesh)
             mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.72f };
+        else if (node is Node3D root)
+        {
+            foreach (var child in root.GetChildren())
+                if (child is MeshInstance3D childMesh && childMesh.Name == $"{name}Mesh")
+                    childMesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.72f };
+        }
+    }
+
+    private void ApplyFace()
+    {
+        var mouth = visual.FindChild("Mouth", true, false) as MeshInstance3D;
+        if (mouth == null) return;
+        mouth.Scale = avatar.Face.Contains("serious") ? new Vector3(0.8f, 0.7f, 1) : Vector3.One;
     }
 
     private void AddHatMarker(NovusAvatarItem item)
@@ -177,7 +242,7 @@ public partial class R6Character : CharacterBody3D
         {
             Name = $"NovusHat_{item.Id}",
             Mesh = new CylinderMesh { TopRadius = 0.95f, BottomRadius = 1.15f, Height = 0.45f },
-            Position = new Vector3(item.HatPosition.X, 3.95f + item.HatPosition.Y * 0.2f, item.HatPosition.Z),
+            Position = new Vector3(item.HatPosition.X, 4.48f + item.HatPosition.Y * 0.22f, item.HatPosition.Z),
             RotationDegrees = item.HatRotation,
             Scale = item.HatScale
         };
@@ -208,7 +273,7 @@ public partial class R6Character : CharacterBody3D
         RotatePart("RightArm", new Vector3(-armAngle, 0, 0));
         RotatePart("LeftLeg", new Vector3(legAngle, 0, 0));
         RotatePart("RightLeg", new Vector3(-legAngle, 0, 0));
-        RotatePart("Head", new Vector3(0, Mathf.Sin(animClock * 1.4f) * 2f, 0));
+        RotatePart("Head", Vector3.Zero);
         if (forceField != null && forceField.Visible) forceField.RotationDegrees += new Vector3(0, 90f * delta, 0);
     }
 

@@ -24,10 +24,19 @@ public partial class ClientMain : Node3D
     private readonly HashSet<long> knownPlayers = new();
     private readonly Dictionary<long, string> playerNames = new();
     private double uiClock;
+    private float cameraDistance = 12f;
+    private bool rotatingCamera;
+    private AudioStreamPlayer switchSound = null!;
+    private Control topBar = null!;
+    private Control playerListPanel = null!;
+    private Control healthPanel = null!;
+    private Control inventoryPanel = null!;
+    private Control chatPanel = null!;
 
     public override async void _Ready()
     {
         SetupInput();
+        SetupAssets();
         var args = OS.GetCmdlineArgs();
         var gameId = ReadArg(args, "--game", "1");
         var baseUrl = ReadArg(args, "--base-url", "http://localhost:3000");
@@ -39,7 +48,7 @@ public partial class ClientMain : Node3D
         AddChild(MapBuilder.Build(map));
         SetupLighting();
         SpawnPlayer();
-        try { localAvatar = await NovusApi.LoadAvatar(baseUrl, ticket); player.SetAvatar(localAvatar); }
+        try { localAvatar = await NovusApi.LoadAvatar(baseUrl, ticket); player.SetAvatar(localAvatar); player.SetDisplayName(localAvatar.Username); }
         catch (Exception ex) { GD.PushWarning($"Avatar not loaded: {ex.Message}"); }
         SetupDesktopHud();
         if (IsMobileDevice()) SetupMobileHud();
@@ -73,6 +82,34 @@ public partial class ClientMain : Node3D
                 if (touch.Index == cameraTouchId) cameraTouchId = -1;
             }
         }
+        else if (ev is InputEventMouseButton mouseButton)
+        {
+            if (mouseButton.ButtonIndex == MouseButton.Right) rotatingCamera = mouseButton.Pressed;
+            if (mouseButton.Pressed && mouseButton.ButtonIndex == MouseButton.WheelUp)
+            {
+                cameraDistance = Mathf.Max(6f, cameraDistance - 1.2f);
+                PlaySwitch();
+            }
+            if (mouseButton.Pressed && mouseButton.ButtonIndex == MouseButton.WheelDown)
+            {
+                cameraDistance = Mathf.Min(28f, cameraDistance + 1.2f);
+                PlaySwitch();
+            }
+        }
+        else if (ev is InputEventMouseMotion motion && rotatingCamera)
+        {
+            yaw -= motion.Relative.X * 0.18f;
+            pitch = Mathf.Clamp(pitch - motion.Relative.Y * 0.18f, 8f, 68f);
+        }
+        else if (ev is InputEventKey key && key.Pressed)
+        {
+            if (key.Keycode == Key.Slash)
+            {
+                chatInput?.GrabFocus();
+                PlaySwitch();
+            }
+            if (key.Keycode == Key.Escape) chatInput?.ReleaseFocus();
+        }
         else if (ev is InputEventScreenDrag drag)
         {
             if (drag.Index == moveTouchId)
@@ -91,17 +128,13 @@ public partial class ClientMain : Node3D
 
     public override void _Process(double delta)
     {
-        if (Input.IsActionPressed("camera_rotate"))
-        {
-            var mouse = Input.GetLastMouseVelocity();
-            yaw -= mouse.X * 0.02f;
-            pitch = Mathf.Clamp(pitch - mouse.Y * 0.02f, -65, 10);
-        }
         if (player != null)
         {
-            var rot = Mathf.DegToRad(yaw);
-            var offset = new Vector3(Mathf.Sin(rot) * 12f, 7f, Mathf.Cos(rot) * 12f);
-            camera.GlobalPosition = player.GlobalPosition + offset;
+            var yawRad = Mathf.DegToRad(yaw);
+            var pitchRad = Mathf.DegToRad(pitch);
+            var horizontal = Mathf.Cos(pitchRad) * cameraDistance;
+            var offset = new Vector3(Mathf.Sin(yawRad) * horizontal, Mathf.Sin(pitchRad) * cameraDistance + 1.2f, Mathf.Cos(yawRad) * horizontal);
+            camera.GlobalPosition = camera.GlobalPosition.Lerp(player.GlobalPosition + offset, 0.35f);
             camera.LookAt(player.GlobalPosition + Vector3.Up * 2f);
             netClock += delta;
             if (Multiplayer.MultiplayerPeer != null && Multiplayer.GetUniqueId() != 1 && netClock >= 0.05)
@@ -114,8 +147,17 @@ public partial class ClientMain : Node3D
             {
                 uiClock = 0;
                 UpdatePlayerList();
+                LayoutHud();
             }
         }
+    }
+
+    private void SetupAssets()
+    {
+        var cursor = GD.Load<Texture2D>("res://assets/ui/ArrowCursor.png");
+        if (cursor != null) Input.SetCustomMouseCursor(cursor, Input.CursorShape.Arrow, Vector2.Zero);
+        switchSound = new AudioStreamPlayer { Stream = GD.Load<AudioStream>("res://assets/ui/SWITCH3.wav"), VolumeDb = -8f };
+        AddChild(switchSound);
     }
 
     private void ConnectMultiplayer(string host, int port)
@@ -197,19 +239,29 @@ public partial class ClientMain : Node3D
     private void SetupLighting()
     {
         var env = new WorldEnvironment();
+        var sky = new Sky();
+        sky.SkyMaterial = new ProceduralSkyMaterial
+        {
+            SkyTopColor = new Color(0.34f, 0.62f, 1f),
+            SkyHorizonColor = new Color(0.92f, 0.96f, 1f),
+            GroundBottomColor = new Color(0.72f, 0.78f, 0.86f),
+            GroundHorizonColor = new Color(0.98f, 0.98f, 1f),
+            SunAngleMax = 18f,
+            SunCurve = 0.08f
+        };
         env.Environment = new Godot.Environment
         {
-            BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = new Color(1f, 0.38f, 0.08f),
+            BackgroundMode = Godot.Environment.BGMode.Sky,
+            Sky = sky,
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
-            AmbientLightColor = new Color(1f, 0.72f, 0.46f),
-            AmbientLightEnergy = 0.65f,
+            AmbientLightColor = new Color(0.78f, 0.86f, 1f),
+            AmbientLightEnergy = 0.8f,
             FogEnabled = true,
-            FogLightColor = new Color(1f, 0.55f, 0.18f),
-            FogDensity = 0.0025f
+            FogLightColor = new Color(0.78f, 0.88f, 1f),
+            FogDensity = 0.0015f
         };
         AddChild(env);
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-35, -25, 0), LightEnergy = 2.2f, ShadowEnabled = true });
+        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-50, -35, 0), LightEnergy = 1.65f, ShadowEnabled = true });
     }
 
     private void SpawnPlayer()
@@ -230,39 +282,50 @@ public partial class ClientMain : Node3D
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(root);
 
-        var top = Panel(new Vector2(0, 0), new Vector2(1280, 26), new Color(0.82f, 0.86f, 0.88f, 0.72f));
-        root.AddChild(top);
-        top.AddChild(new Label { Text = "Novus Worlds", Position = new Vector2(12, 4), Modulate = Colors.White });
-        foreach (var item in new[] { "Reset", "Help", "Exit" })
-            top.AddChild(new Label { Text = item, Position = new Vector2(170 + top.GetChildCount() * 80, 4), Modulate = new Color(0.12f, 0.12f, 0.12f) });
+        topBar = Panel(Vector2.Zero, new Vector2(1280, 25), new Color(0.80f, 0.82f, 0.84f, 0.76f));
+        root.AddChild(topBar);
+        topBar.AddChild(new Label { Text = "Novus Worlds", Position = new Vector2(10, 4), Modulate = Colors.White });
+        AddTopButton("Reset", 250, () => { player.GlobalPosition = map.Spawn + Vector3.Up * 2f; PlaySwitch(); });
+        AddTopButton("Help", 330, () => { AddChatLine("WASD move, right mouse rotates camera, mouse wheel zooms, / opens chat."); PlaySwitch(); });
+        AddTopButton("Exit", 410, () => { PlaySwitch(); GetTree().Quit(); });
 
-        var healthPanel = new Control { Position = new Vector2(1130, 290), Size = new Vector2(90, 170) };
+        healthPanel = new Control { Position = new Vector2(1130, 290), Size = new Vector2(90, 170) };
         root.AddChild(healthPanel);
         healthFill = new ColorRect { Position = new Vector2(35, 0), Size = new Vector2(7, 138), Color = new Color(0.38f, 0.78f, 0.22f) };
         healthPanel.AddChild(healthFill);
         healthLabel = new Label { Text = "Health", Position = new Vector2(14, 140), Modulate = Colors.Blue };
         healthPanel.AddChild(healthLabel);
 
-        var listPanel = Panel(new Vector2(1048, 10), new Vector2(210, 180), new Color(0.75f, 0.78f, 0.82f, 0.58f));
-        root.AddChild(listPanel);
+        playerListPanel = Panel(new Vector2(1048, 32), new Vector2(210, 180), new Color(0.72f, 0.72f, 0.72f, 0.52f));
+        root.AddChild(playerListPanel);
         playerList = new Label { Text = "Player List", Position = new Vector2(8, 5), Modulate = Colors.White };
-        listPanel.AddChild(playerList);
+        playerListPanel.AddChild(playerList);
 
-        var inventory = Panel(new Vector2(8, 625), new Vector2(300, 86), new Color(0.72f, 0.74f, 0.76f, 0.48f));
-        root.AddChild(inventory);
+        inventoryPanel = Panel(new Vector2(8, 625), new Vector2(300, 76), new Color(0.72f, 0.74f, 0.76f, 0.36f));
+        root.AddChild(inventoryPanel);
         for (var i = 0; i < 5; i++)
         {
             var slot = Panel(new Vector2(8 + i * 56, 18), new Vector2(48, 48), new Color(0.9f, 0.94f, 0.98f, 0.72f));
             slot.AddChild(new Label { Text = (i + 1).ToString(), Position = new Vector2(3, 28), Modulate = Colors.White });
-            inventory.AddChild(slot);
+            inventoryPanel.AddChild(slot);
         }
 
-        chatLog = new RichTextLabel { Position = new Vector2(8, 28), Size = new Vector2(330, 118), BbcodeEnabled = false, ScrollActive = true, Modulate = Colors.White };
-        root.AddChild(chatLog);
+        chatPanel = new Control { Position = new Vector2(8, 32), Size = new Vector2(360, 136) };
+        root.AddChild(chatPanel);
+        chatLog = new RichTextLabel { Position = Vector2.Zero, Size = new Vector2(360, 112), BbcodeEnabled = false, ScrollActive = true, Modulate = Colors.White };
+        chatPanel.AddChild(chatLog);
         chatInput = new LineEdit { PlaceholderText = "To chat click here or press the / key", Position = new Vector2(8, 690), Size = new Vector2(520, 24) };
         chatInput.TextSubmitted += SendChatMessage;
         root.AddChild(chatInput);
         AddChatLine("Bem-vindo ao Novus Worlds.");
+        LayoutHud();
+    }
+
+    private void AddTopButton(string text, float x, Action action)
+    {
+        var button = new Button { Text = text, Position = new Vector2(x, 0), Size = new Vector2(72, 24), Flat = true };
+        button.Pressed += action;
+        topBar.AddChild(button);
     }
 
     private void SetupMobileHud()
@@ -314,7 +377,13 @@ public partial class ClientMain : Node3D
         var msg = Moderate(raw).Trim();
         chatInput.Text = "";
         if (msg.Length == 0) return;
-        RpcId(1, nameof(SendChat), msg);
+        if (Multiplayer.MultiplayerPeer == null || Multiplayer.GetUniqueId() == 1)
+        {
+            AddChatLine($"{localAvatar.Username}: {msg}");
+            player.ShowChatBubble(msg);
+        }
+        else RpcId(1, nameof(SendChat), msg);
+        PlaySwitch();
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -332,6 +401,23 @@ public partial class ClientMain : Node3D
         foreach (var id in knownPlayers)
             if (id != Multiplayer.GetUniqueId()) text += PlayerName(id) + "\n";
         playerList.Text = text;
+    }
+
+    private void LayoutHud()
+    {
+        var size = GetViewport().GetVisibleRect().Size;
+        if (topBar != null) topBar.Size = new Vector2(size.X, 25);
+        if (playerListPanel != null) playerListPanel.Position = new Vector2(size.X - 220, 31);
+        if (healthPanel != null) healthPanel.Position = new Vector2(size.X - 125, size.Y * 0.36f);
+        if (inventoryPanel != null) inventoryPanel.Position = new Vector2(8, size.Y - 96);
+        if (chatInput != null) chatInput.Position = new Vector2(8, size.Y - 30);
+    }
+
+    private void PlaySwitch()
+    {
+        if (switchSound?.Stream == null) return;
+        switchSound.Stop();
+        switchSound.Play();
     }
 
     private string PlayerName(long id) => playerNames.TryGetValue(id, out var name) ? name : $"Player{id}";
