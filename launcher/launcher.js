@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const arg = process.argv.slice(2).join(' ');
 const configPath = path.join(__dirname, 'config.json');
@@ -98,21 +98,68 @@ function launch(resolved, args, label) {
 
 function launchViaCmd(resolved, args, label) {
   const script = path.join(cacheDir, `launch-${label}.cmd`);
+  const windowControl = writeWindowControlScript();
   const quotedArgs = args.map(cmdQuote).join(' ');
-  const body = [
-    '@echo off',
-    `cd /d ${cmdQuote(resolved.cwd)}`,
-    `start "" ${label === 'server' ? '/min' : '/max'} ${cmdQuote(resolved.exe)} ${quotedArgs}`,
-    `echo %date% %time% launched ${label} >> ${cmdQuote(logPath)}`
-  ].join('\r\n');
+  const launchLines = label === 'server'
+    ? [
+        `powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Set-Location -LiteralPath ${psQuote(resolved.cwd)}; Start-Process -FilePath ${psQuote(resolved.exe)} -ArgumentList @(${args.map(psQuote).join(',')}) -WindowStyle Hidden"`,
+        `powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ${cmdQuote(windowControl)} RobloxApp_server hide`
+      ]
+    : [
+        `start "" /max ${cmdQuote(resolved.exe)} ${quotedArgs}`,
+        `powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ${cmdQuote(windowControl)} RobloxApp_server hide`,
+        `powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ${cmdQuote(windowControl)} RobloxApp_client foreground`
+      ];
+  const body = ['@echo off', `cd /d ${cmdQuote(resolved.cwd)}`, ...launchLines, `echo %date% %time% launched ${label} >> ${cmdQuote(logPath)}`].join('\r\n');
   fs.writeFileSync(script, body);
   log(`Wrote ${script}`);
   const child = spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true });
   child.unref();
 }
 
+function writeWindowControlScript() {
+  const file = path.join(cacheDir, 'window-control.ps1');
+  const source = `
+param([string]$ProcessName, [string]$Mode)
+$signature = @"
+[DllImport("user32.dll")]
+public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")]
+public static extern bool SetForegroundWindow(IntPtr hWnd);
+"@
+Add-Type -MemberDefinition $signature -Name Win32 -Namespace Native -ErrorAction SilentlyContinue
+if ($Mode -eq "hide") {
+  $iterations = 160
+  $sleepMs = 250
+} else {
+  $iterations = 50
+  $sleepMs = 150
+}
+for ($i = 0; $i -lt $iterations; $i++) {
+  Start-Sleep -Milliseconds $sleepMs
+  $processes = Get-Process $ProcessName -ErrorAction SilentlyContinue
+  foreach ($p in $processes) {
+    if ($p.MainWindowHandle -ne 0) {
+      if ($Mode -eq "hide") {
+        [Native.Win32]::ShowWindowAsync($p.MainWindowHandle, 0) | Out-Null
+      } elseif ($Mode -eq "foreground") {
+        [Native.Win32]::ShowWindowAsync($p.MainWindowHandle, 3) | Out-Null
+        [Native.Win32]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
+      }
+    }
+  }
+}
+`;
+  fs.writeFileSync(file, source);
+  return file;
+}
+
 function cmdQuote(value) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function psQuote(value) {
+  return `'${String(value ?? '').replace(/'/g, "''")}'`;
 }
 
 function chooseTemplate(kind, template, exe) {
@@ -175,7 +222,7 @@ function novetusPort() {
 function closeExistingNovetus() {
   if (process.platform !== 'win32' || config.closeExistingNovetus === false) return;
   for (const image of ['RobloxApp_client.exe', 'RobloxApp_server.exe', 'RobloxApp_solo.exe']) {
-    try { spawn('taskkill.exe', ['/IM', image, '/F'], { stdio: 'ignore', windowsHide: true }); } catch {}
+    try { spawnSync('taskkill.exe', ['/IM', image, '/F'], { stdio: 'ignore', windowsHide: true }); } catch {}
   }
 }
 
