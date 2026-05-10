@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public partial class ServerMain : Node
@@ -35,10 +36,22 @@ public partial class ServerMain : Node
     public void ReceiveState(long id, Vector3 position, Vector3 rotation, string animation) {}
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void RegisterPlayer(string username)
+    {
+        var id = Multiplayer.GetRemoteSenderId();
+        if (!players.ContainsKey(id)) players[id] = new PlayerState();
+        players[id].Username = string.IsNullOrWhiteSpace(username) ? $"Player{id}" : username.Left(20);
+        Rpc(nameof(PlayerJoined), id, players[id].Username);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void PlayerJoined(long id, string username) {}
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void SendChat(string message)
     {
         var id = Multiplayer.GetRemoteSenderId();
-        Rpc(nameof(ReceiveChat), id, message.Left(120));
+        Rpc(nameof(ReceiveChat), id, Moderate(message).Left(120));
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -71,5 +84,14 @@ public partial class ServerMain : Node
         public Vector3 Position = Vector3.Zero;
         public Vector3 Rotation = Vector3.Zero;
         public string Animation = "idle";
+        public string Username = "";
+    }
+
+    private static string Moderate(string message)
+    {
+        var text = (message ?? "").Trim();
+        foreach (var bad in new[] { "porra", "caralho", "merda" })
+            text = text.Replace(bad, "****", StringComparison.OrdinalIgnoreCase);
+        return text;
     }
 }

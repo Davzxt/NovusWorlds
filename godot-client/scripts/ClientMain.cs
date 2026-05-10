@@ -15,6 +15,15 @@ public partial class ClientMain : Node3D
     private int cameraTouchId = -1;
     private Vector2 moveOrigin;
     private Vector2 mobileMove;
+    private NovusAvatar localAvatar = new();
+    private Label playerList = null!;
+    private Label healthLabel = null!;
+    private ColorRect healthFill = null!;
+    private RichTextLabel chatLog = null!;
+    private LineEdit chatInput = null!;
+    private readonly HashSet<long> knownPlayers = new();
+    private readonly Dictionary<long, string> playerNames = new();
+    private double uiClock;
 
     public override async void _Ready()
     {
@@ -30,9 +39,10 @@ public partial class ClientMain : Node3D
         AddChild(MapBuilder.Build(map));
         SetupLighting();
         SpawnPlayer();
-        try { player.SetAvatar(await NovusApi.LoadAvatar(baseUrl, ticket)); }
+        try { localAvatar = await NovusApi.LoadAvatar(baseUrl, ticket); player.SetAvatar(localAvatar); }
         catch (Exception ex) { GD.PushWarning($"Avatar not loaded: {ex.Message}"); }
-        SetupMobileHud();
+        SetupDesktopHud();
+        if (IsMobileDevice()) SetupMobileHud();
         ConnectMultiplayer(serverHost, serverPort);
     }
 
@@ -97,7 +107,13 @@ public partial class ClientMain : Node3D
             if (Multiplayer.MultiplayerPeer != null && Multiplayer.GetUniqueId() != 1 && netClock >= 0.05)
             {
                 netClock = 0;
-                RpcId(1, nameof(SubmitState), player.GlobalPosition, player.RotationDegrees, "move");
+                RpcId(1, nameof(SubmitState), player.GlobalPosition, player.RotationDegrees, player.CurrentAnimation);
+            }
+            uiClock += delta;
+            if (uiClock > 0.5)
+            {
+                uiClock = 0;
+                UpdatePlayerList();
             }
         }
     }
@@ -112,13 +128,20 @@ public partial class ClientMain : Node3D
             return;
         }
         Multiplayer.MultiplayerPeer = peer;
-        Multiplayer.ConnectedToServer += () => GD.Print("Connected to Novus Godot server");
+        Multiplayer.ConnectedToServer += () =>
+        {
+            GD.Print("Connected to Novus Godot server");
+            RpcId(1, nameof(RegisterPlayer), localAvatar.Username);
+        };
         Multiplayer.ConnectionFailed += () => GD.PushWarning("Could not connect to Novus Godot server");
         Multiplayer.ServerDisconnected += () => GD.PushWarning("Disconnected from Novus Godot server");
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
     public void SubmitState(Vector3 position, Vector3 rotation, string animation) {}
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void RegisterPlayer(string username) {}
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
     public void ReceiveState(long id, Vector3 position, Vector3 rotation, string animation)
@@ -132,10 +155,28 @@ public partial class ClientMain : Node3D
         }
         remote.GlobalPosition = remote.GlobalPosition.Lerp(position, 0.35f);
         remote.RotationDegrees = rotation;
+        if (remote is R6Character r6) r6.SetRemoteAnimation(animation);
+        knownPlayers.Add(id);
+        if (!playerNames.ContainsKey(id)) playerNames[id] = $"Player{id}";
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public void ReceiveChat(long id, string message) {}
+    public void ReceiveChat(long id, string message)
+    {
+        var clean = Moderate(message);
+        AddChatLine($"{PlayerName(id)}: {clean}");
+        if (id == Multiplayer.GetUniqueId()) player.ShowChatBubble(clean);
+        else if (remotePlayers.TryGetValue(id, out var remote) && remote is R6Character r6) r6.ShowChatBubble(clean);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void PlayerJoined(long id, string username)
+    {
+        knownPlayers.Add(id);
+        playerNames[id] = username;
+        AddChatLine($"{username} entrou no jogo.");
+        UpdatePlayerList();
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void PlayerLeft(long id)
@@ -143,6 +184,9 @@ public partial class ClientMain : Node3D
         if (!remotePlayers.TryGetValue(id, out var remote)) return;
         remote.QueueFree();
         remotePlayers.Remove(id);
+        knownPlayers.Remove(id);
+        playerNames.Remove(id);
+        UpdatePlayerList();
     }
 
     private static Node3D CreateRemotePlayer(long id)
@@ -153,9 +197,19 @@ public partial class ClientMain : Node3D
     private void SetupLighting()
     {
         var env = new WorldEnvironment();
-        env.Environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = map.SkyColor, AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = Colors.White, AmbientLightEnergy = 0.55f };
+        env.Environment = new Godot.Environment
+        {
+            BackgroundMode = Godot.Environment.BGMode.Color,
+            BackgroundColor = new Color(1f, 0.38f, 0.08f),
+            AmbientLightSource = Godot.Environment.AmbientSource.Color,
+            AmbientLightColor = new Color(1f, 0.72f, 0.46f),
+            AmbientLightEnergy = 0.65f,
+            FogEnabled = true,
+            FogLightColor = new Color(1f, 0.55f, 0.18f),
+            FogDensity = 0.0025f
+        };
         AddChild(env);
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-45, -35, 0), LightEnergy = 1.8f, ShadowEnabled = true });
+        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-35, -25, 0), LightEnergy = 2.2f, ShadowEnabled = true });
     }
 
     private void SpawnPlayer()
@@ -166,6 +220,49 @@ public partial class ClientMain : Node3D
         AddChild(player);
         camera = new Camera3D { Current = true, Fov = 70f };
         AddChild(camera);
+    }
+
+    private void SetupDesktopHud()
+    {
+        var layer = new CanvasLayer { Name = "ClassicHud" };
+        AddChild(layer);
+        var root = new Control();
+        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        layer.AddChild(root);
+
+        var top = Panel(new Vector2(0, 0), new Vector2(1280, 26), new Color(0.82f, 0.86f, 0.88f, 0.72f));
+        root.AddChild(top);
+        top.AddChild(new Label { Text = "Novus Worlds", Position = new Vector2(12, 4), Modulate = Colors.White });
+        foreach (var item in new[] { "Reset", "Help", "Exit" })
+            top.AddChild(new Label { Text = item, Position = new Vector2(170 + top.GetChildCount() * 80, 4), Modulate = new Color(0.12f, 0.12f, 0.12f) });
+
+        var healthPanel = new Control { Position = new Vector2(1130, 290), Size = new Vector2(90, 170) };
+        root.AddChild(healthPanel);
+        healthFill = new ColorRect { Position = new Vector2(35, 0), Size = new Vector2(7, 138), Color = new Color(0.38f, 0.78f, 0.22f) };
+        healthPanel.AddChild(healthFill);
+        healthLabel = new Label { Text = "Health", Position = new Vector2(14, 140), Modulate = Colors.Blue };
+        healthPanel.AddChild(healthLabel);
+
+        var listPanel = Panel(new Vector2(1048, 10), new Vector2(210, 180), new Color(0.75f, 0.78f, 0.82f, 0.58f));
+        root.AddChild(listPanel);
+        playerList = new Label { Text = "Player List", Position = new Vector2(8, 5), Modulate = Colors.White };
+        listPanel.AddChild(playerList);
+
+        var inventory = Panel(new Vector2(8, 625), new Vector2(300, 86), new Color(0.72f, 0.74f, 0.76f, 0.48f));
+        root.AddChild(inventory);
+        for (var i = 0; i < 5; i++)
+        {
+            var slot = Panel(new Vector2(8 + i * 56, 18), new Vector2(48, 48), new Color(0.9f, 0.94f, 0.98f, 0.72f));
+            slot.AddChild(new Label { Text = (i + 1).ToString(), Position = new Vector2(3, 28), Modulate = Colors.White });
+            inventory.AddChild(slot);
+        }
+
+        chatLog = new RichTextLabel { Position = new Vector2(8, 28), Size = new Vector2(330, 118), BbcodeEnabled = false, ScrollActive = true, Modulate = Colors.White };
+        root.AddChild(chatLog);
+        chatInput = new LineEdit { PlaceholderText = "To chat click here or press the / key", Position = new Vector2(8, 690), Size = new Vector2(520, 24) };
+        chatInput.TextSubmitted += SendChatMessage;
+        root.AddChild(chatInput);
+        AddChatLine("Bem-vindo ao Novus Worlds.");
     }
 
     private void SetupMobileHud()
@@ -202,6 +299,55 @@ public partial class ClientMain : Node3D
         };
         jump.Pressed += () => player?.QueueJump();
         root.AddChild(jump);
+    }
+
+    private static Panel Panel(Vector2 position, Vector2 size, Color color)
+    {
+        var panel = new Panel { Position = position, Size = size };
+        var style = new StyleBoxFlat { BgColor = color, BorderColor = new Color(0.45f, 0.45f, 0.45f), BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1, BorderWidthTop = 1 };
+        panel.AddThemeStyleboxOverride("panel", style);
+        return panel;
+    }
+
+    private void SendChatMessage(string raw)
+    {
+        var msg = Moderate(raw).Trim();
+        chatInput.Text = "";
+        if (msg.Length == 0) return;
+        RpcId(1, nameof(SendChat), msg);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void SendChat(string message) {}
+
+    private void AddChatLine(string line)
+    {
+        chatLog?.AppendText(line + "\n");
+    }
+
+    private void UpdatePlayerList()
+    {
+        if (playerList == null) return;
+        var text = "Player List\n" + localAvatar.Username + "\n";
+        foreach (var id in knownPlayers)
+            if (id != Multiplayer.GetUniqueId()) text += PlayerName(id) + "\n";
+        playerList.Text = text;
+    }
+
+    private string PlayerName(long id) => playerNames.TryGetValue(id, out var name) ? name : $"Player{id}";
+
+    private static string Moderate(string message)
+    {
+        var text = (message ?? "").Trim();
+        foreach (var bad in new[] { "porra", "caralho", "merda" })
+            text = text.Replace(bad, "****", StringComparison.OrdinalIgnoreCase);
+        return text.Length > 120 ? text[..120] : text;
+    }
+
+    private static bool IsMobileDevice()
+    {
+        var os = OS.GetName();
+        return os == "Android" || os == "iOS";
     }
 
     private static void SetupInput()

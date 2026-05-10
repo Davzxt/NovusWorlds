@@ -3,7 +3,7 @@ using Godot;
 public partial class R6Character : CharacterBody3D
 {
     [Export] public float WalkSpeed = 13f;
-    [Export] public float JumpVelocity = 7.5f;
+    [Export] public float JumpVelocity = 9.2f;
     [Export] public bool IsRemote;
 
     public Vector2 MobileMove { get; set; }
@@ -13,6 +13,10 @@ public partial class R6Character : CharacterBody3D
     private float gravity;
     private bool mobileJumpQueued;
     private NovusAvatar avatar = new();
+    private float animClock;
+    private string animState = "idle";
+    private Label3D bubble = null!;
+    private MeshInstance3D forceField = null!;
 
     public override void _Ready()
     {
@@ -22,6 +26,8 @@ public partial class R6Character : CharacterBody3D
         anim = CreateAnimations();
         visual.AddChild(anim);
         ApplyAvatarColors();
+        AddBubble();
+        AddForceField();
     }
 
     public override void _PhysicsProcess(double delta)
@@ -36,7 +42,7 @@ public partial class R6Character : CharacterBody3D
         var velocity = Velocity;
         velocity.X = direction.X * WalkSpeed;
         velocity.Z = direction.Z * WalkSpeed;
-        if (!IsOnFloor()) velocity.Y -= gravity * (float)delta;
+        if (!IsOnFloor()) velocity.Y -= gravity * 1.85f * (float)delta;
         else if (Input.IsActionJustPressed("jump") || mobileJumpQueued) velocity.Y = JumpVelocity;
         mobileJumpQueued = false;
         Velocity = velocity;
@@ -44,10 +50,16 @@ public partial class R6Character : CharacterBody3D
         if (direction.Length() > 0.05f)
         {
             LookAt(GlobalPosition + direction, Vector3.Up);
-            if (anim.CurrentAnimation != "walk") anim.Play("walk");
+            animState = "walk";
         }
-        else if (IsOnFloor() && anim.CurrentAnimation != "idle") anim.Play("idle");
-        if (!IsOnFloor() && anim.CurrentAnimation != "jump") anim.Play("jump");
+        else if (IsOnFloor()) animState = "idle";
+        if (!IsOnFloor()) animState = velocity.Y > 0 ? "jump" : "fall";
+        AnimateClassic((float)delta);
+    }
+
+    public override void _Process(double delta)
+    {
+        if (IsRemote) AnimateClassic((float)delta);
     }
 
     public void QueueJump()
@@ -59,6 +71,26 @@ public partial class R6Character : CharacterBody3D
     {
         avatar = nextAvatar ?? new NovusAvatar();
         if (visual != null) ApplyAvatarColors();
+    }
+
+    public void SetRemoteAnimation(string animation)
+    {
+        animState = string.IsNullOrWhiteSpace(animation) ? "idle" : animation;
+    }
+
+    public string CurrentAnimation => animState;
+
+    public void ShowChatBubble(string message)
+    {
+        if (bubble == null) return;
+        bubble.Text = message;
+        bubble.Visible = true;
+        GetTree().CreateTimer(5).Timeout += () => { if (IsInstanceValid(bubble)) bubble.Visible = false; };
+    }
+
+    public void HideForceFieldLater()
+    {
+        GetTree().CreateTimer(7).Timeout += () => { if (IsInstanceValid(forceField)) forceField.Visible = false; };
     }
 
     private Node3D CreateVisual()
@@ -94,6 +126,43 @@ public partial class R6Character : CharacterBody3D
             if (item.Type == "hat") AddHatMarker(item);
     }
 
+    private void AddBubble()
+    {
+        bubble = new Label3D
+        {
+            Name = "ChatBubble",
+            Text = "",
+            Visible = false,
+            Position = new Vector3(0, 5.3f, 0),
+            PixelSize = 0.018f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Modulate = Colors.White,
+            OutlineModulate = Colors.Black,
+            OutlineSize = 8
+        };
+        AddChild(bubble);
+    }
+
+    private void AddForceField()
+    {
+        forceField = new MeshInstance3D
+        {
+            Name = "ForceField",
+            Mesh = new BoxMesh { Size = new Vector3(3.2f, 4.7f, 1.8f) },
+            Position = new Vector3(0, 2.1f, 0),
+            MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.55f, 0.05f, 1f, 0.38f),
+                EmissionEnabled = true,
+                Emission = new Color(0.55f, 0.05f, 1f),
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded
+            }
+        };
+        AddChild(forceField);
+        HideForceFieldLater();
+    }
+
     private void TintPart(string name, Color color)
     {
         var node = visual.FindChild(name, true, false);
@@ -125,5 +194,27 @@ public partial class R6Character : CharacterBody3D
         library.AddAnimation("jump", new Animation { Length = 0.4f });
         player.AddAnimationLibrary("", library);
         return player;
+    }
+
+    private void AnimateClassic(float delta)
+    {
+        animClock += delta;
+        var swing = Mathf.Sin(animClock * (animState == "walk" ? 8.5f : 2.5f));
+        var armAngle = animState == "walk" ? swing * 24f : 0f;
+        var legAngle = animState == "walk" ? -swing * 24f : 0f;
+        if (animState == "jump") { armAngle = -28f; legAngle = 12f; }
+        if (animState == "fall") { armAngle = 18f; legAngle = -8f; }
+        RotatePart("LeftArm", new Vector3(armAngle, 0, 0));
+        RotatePart("RightArm", new Vector3(-armAngle, 0, 0));
+        RotatePart("LeftLeg", new Vector3(legAngle, 0, 0));
+        RotatePart("RightLeg", new Vector3(-legAngle, 0, 0));
+        RotatePart("Head", new Vector3(0, Mathf.Sin(animClock * 1.4f) * 2f, 0));
+        if (forceField != null && forceField.Visible) forceField.RotationDegrees += new Vector3(0, 90f * delta, 0);
+    }
+
+    private void RotatePart(string name, Vector3 degrees)
+    {
+        var node = visual.FindChild(name, true, false);
+        if (node is Node3D part) part.RotationDegrees = degrees;
     }
 }
