@@ -249,6 +249,10 @@ function isFetchableAsset(url) {
   return /^https?:\/\//i.test(String(url || ''));
 }
 
+function isLegacyMesh(value) {
+  return /\.(mesh|rbxm|rbxmx)$/i.test(String(value || '')) || /^rbxasset:\/\//i.test(String(value || ''));
+}
+
 function writeDataUrl(dataUrl, name) {
   const match = String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return '';
@@ -392,7 +396,7 @@ function avatarToLua(avatar, assets = []) {
     if (item.type === 'pants' && texture) {
       lines.push(`  do local pants = Instance.new("Pants"); pants.Name = "NovusPants"; pants.PantsTemplate = makeContent("${lua(texture)}"); pants.Parent = character end`);
     }
-    if (item.type === 'hat' && model) {
+    if (item.type === 'hat' && model && item.compatible !== false && isLegacyMesh(model)) {
       const t = item.hatTransform || {};
       const p = t.position || {};
       const r = t.rotation || {};

@@ -27,13 +27,18 @@ function legacyType(item) {
   if (item.type === 'face') return 'FaceDecal';
   if (item.type === 'shirt') return 'ShirtTemplate';
   if (item.type === 'pants') return 'PantsTemplate';
-  if (item.type === 'hat') return hatModelUrl(item) ? 'HatMesh' : 'HatNeedsMeshConversion';
+  if (item.type === 'hat') return legacyHatCompatible(item) ? 'HatMesh' : 'HatNeedsMeshConversion';
   return 'Unknown';
 }
 
 function hatModelUrl(item) {
   if (item.type !== 'hat') return item.model_url;
   return item.model_url || (/\.(gltf|glb|obj|mesh)$/i.test(String(item.asset_url || '')) ? item.asset_url : null);
+}
+
+function legacyHatCompatible(item) {
+  const model = String(hatModelUrl(item) || '');
+  return /\.(mesh|rbxm|rbxmx)$/i.test(model) || /^rbxasset:\/\//i.test(model);
 }
 
 function getUserByRequest(req) {
@@ -70,8 +75,8 @@ function getResolvedAvatar(user, req) {
       textureUrl: absolute(req, item.type === 'hat' && hatModelUrl(item) === item.asset_url ? item.thumbnail_url : item.asset_url),
       modelUrl: absolute(req, hatModelUrl(item)),
       hatTransform: parseJson(item.hat_transform, {}),
-      compatible: item.type !== 'hat' || Boolean(hatModelUrl(item)),
-      note: item.type === 'hat' && !hatModelUrl(item) ? 'Chapeu precisa de modelo enviado para funcionar no client 2008/2012.' : null
+      compatible: item.type !== 'hat' || legacyHatCompatible(item),
+      note: item.type === 'hat' && !legacyHatCompatible(item) ? 'Este chapeu precisa ser convertido para mesh legado antes de funcionar no Novetus/Roblox 2011.' : null
     }))
   };
 }
@@ -210,7 +215,7 @@ router.get('/assets/:id', (req, res) => {
     textureUrl: absolute(req, item.type === 'hat' && hatModelUrl(item) === item.asset_url ? item.thumbnail_url : item.asset_url),
     modelUrl: absolute(req, hatModelUrl(item)),
     hatTransform: parseJson(item.hat_transform, {}),
-    compatible: item.type !== 'hat' || Boolean(hatModelUrl(item))
+    compatible: item.type !== 'hat' || legacyHatCompatible(item)
   });
 });
 

@@ -55,7 +55,8 @@ function Register-Protocol($scheme, $description, $nodePath, $launcherPath) {
   New-ItemProperty -Path $base -Name "(default)" -Value "URL:$description" -Force | Out-Null
   New-ItemProperty -Path $base -Name "URL Protocol" -Value "" -Force | Out-Null
   New-Item -Path "$base\shell\open\command" -Force | Out-Null
-  $command = '"' + $nodePath + '" "' + $launcherPath + '" "%1"'
+  $hidden = Join-Path (Split-Path $launcherPath) "launch-hidden.ps1"
+  $command = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $hidden + '" "%1"'
   New-ItemProperty -Path "$base\shell\open\command" -Name "(default)" -Value $command -Force | Out-Null
 }
 
@@ -166,6 +167,7 @@ $install.Add_Click({
     Log "Node encontrado: $nodePath"
 
     $launcherPath = Download-File "launcher.js" $installDir
+    Download-File "launch-hidden.ps1" $installDir | Out-Null
     Download-File "config.example.json" $installDir | Out-Null
     Download-File "README.md" $installDir | Out-Null
     Log "Launcher baixado."
