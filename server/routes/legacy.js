@@ -23,8 +23,13 @@ function legacyType(item) {
   if (item.type === 'face') return 'FaceDecal';
   if (item.type === 'shirt') return 'ShirtTemplate';
   if (item.type === 'pants') return 'PantsTemplate';
-  if (item.type === 'hat') return item.legacy_mesh_url ? 'HatMesh' : 'HatNeedsMeshConversion';
+  if (item.type === 'hat') return hatModelUrl(item) ? 'HatMesh' : 'HatNeedsMeshConversion';
   return 'Unknown';
+}
+
+function hatModelUrl(item) {
+  if (item.type !== 'hat') return item.model_url;
+  return item.model_url || (/\.(gltf|glb|obj|mesh)$/i.test(String(item.asset_url || '')) ? item.asset_url : null);
 }
 
 function getUserByRequest(req) {
@@ -58,11 +63,11 @@ function getResolvedAvatar(user, req) {
       name: item.name,
       type: item.type,
       legacyType: legacyType(item),
-      textureUrl: absolute(req, item.asset_url),
-      modelUrl: absolute(req, item.model_url),
+      textureUrl: absolute(req, item.type === 'hat' && hatModelUrl(item) === item.asset_url ? item.thumbnail_url : item.asset_url),
+      modelUrl: absolute(req, hatModelUrl(item)),
       hatTransform: parseJson(item.hat_transform, {}),
-      compatible: item.type !== 'hat' || Boolean(item.legacy_mesh_url),
-      note: item.type === 'hat' && !item.legacy_mesh_url ? 'GLTF/GLB precisa ser convertido para mesh/acessorio legado antes de funcionar no client 2008/2012.' : null
+      compatible: item.type !== 'hat' || Boolean(hatModelUrl(item)),
+      note: item.type === 'hat' && !hatModelUrl(item) ? 'Chapeu precisa de modelo enviado para funcionar no client 2008/2012.' : null
     }))
   };
 }
@@ -198,10 +203,10 @@ router.get('/assets/:id', (req, res) => {
     name: item.name,
     type: item.type,
     legacyType: legacyType(item),
-    textureUrl: absolute(req, item.asset_url),
-    modelUrl: absolute(req, item.model_url),
+    textureUrl: absolute(req, item.type === 'hat' && hatModelUrl(item) === item.asset_url ? item.thumbnail_url : item.asset_url),
+    modelUrl: absolute(req, hatModelUrl(item)),
     hatTransform: parseJson(item.hat_transform, {}),
-    compatible: item.type !== 'hat' || Boolean(item.legacy_mesh_url)
+    compatible: item.type !== 'hat' || Boolean(hatModelUrl(item))
   });
 });
 

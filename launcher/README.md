@@ -27,18 +27,25 @@ Este launcher e a ponte local para client/studio Roblox 2012.
 - baixa join script
 - baixa avatar appearance
 - baixa place JSON
+- baixa texturas/modelos do avatar para o cache local
+- gera `.rbxlx` do mapa
+- gera `avatar-appearance.lua` com `Hat`, `Decal`, `Shirt` e `Pants`
 - chama `playerExe`
 
 `novus-studio://edit`:
 
 - baixa projeto do Studio
+- gera `.rbxlx` temporario
 - chama `studioExe`
 
-## Pendente para client 2012 real
+## Observacao sobre assets 2012
 
-O launcher ainda precisa de adaptadores especificos para:
+O launcher gera objetos compativeis com o modelo de instancias do Roblox 2012:
 
-- converter place JSON para `.rbxl` ou script de criação de Parts;
-- converter hats GLTF/GLB para mesh/acessorio legado;
-- aplicar shirts/pants/faces no formato esperado pelo client;
-- iniciar o Roblox 2012 com os argumentos reais da build escolhida.
+- `Hat` com `Handle`, `SpecialMesh`, `MeshId`, `TextureId` e `Weld`
+- `Decal` chamado `face` no `Head`
+- `Shirt.ShirtTemplate`
+- `Pants.PantsTemplate`
+- cores R6 aplicadas em `Head`, `Torso`, `Left Arm`, `Right Arm`, `Left Leg` e `Right Leg`
+
+Para hats em GLTF/GLB, o client 2012 real nao le esse formato nativamente. O upload fica aceito no site/admin, mas para renderizar exatamente no executavel antigo ele precisa estar em um formato que a build consiga carregar como `SpecialMesh.MeshId`, ou passar por conversao externa para mesh legado antes do uso.

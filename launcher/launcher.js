@@ -35,13 +35,15 @@ async function joinGame() {
   const joinScript = await text(`${baseUrl}/api/legacy/join-script?ticket=${encodeURIComponent(ticket)}`);
   const avatar = await json(`${baseUrl}/api/legacy/avatar?ticket=${encodeURIComponent(ticket)}`);
   const place = await json(`${baseUrl}/api/legacy/place/${encodeURIComponent(gameId)}`);
+  const avatarAssets = await cacheAvatarAssets(avatar.avatar || {});
   const joinPath = write('join-script.lua', joinScript);
   const avatarPath = write('avatar.json', JSON.stringify(avatar, null, 2));
+  const avatarAssetsPath = write('avatar-assets.json', JSON.stringify(avatarAssets, null, 2));
   const placePath = write(`place-${gameId}.json`, JSON.stringify(place, null, 2));
   const placeFile = write(`place-${gameId}.rbxlx`, mapToRbxlx(place.map || {}, place.title || `Place ${gameId}`));
-  const avatarScript = write('avatar-appearance.lua', avatarToLua(avatar.avatar || {}));
-  const args = applyArgs(config.playerArgs || ['{joinScript}', '{placeFile}'], { joinScript: joinPath, avatarJson: avatarPath, avatarScript, placeJson: placePath, placeFile });
-  console.log(`Downloaded join data:\n${joinPath}\n${avatarPath}\n${placePath}\n${placeFile}\n${avatarScript}`);
+  const avatarScript = write('avatar-appearance.lua', avatarToLua(avatar.avatar || {}, avatarAssets));
+  const args = applyArgs(config.playerArgs || ['{joinScript}', '{placeFile}'], { joinScript: joinPath, avatarJson: avatarPath, avatarAssets: avatarAssetsPath, avatarScript, placeJson: placePath, placeFile });
+  console.log(`Downloaded join data:\n${joinPath}\n${avatarPath}\n${avatarAssetsPath}\n${placePath}\n${placeFile}\n${avatarScript}`);
   launch(config.playerExe, args, 'player');
 }
 
@@ -100,6 +102,42 @@ function expandEnv(value) {
 
 function applyArgs(template, values) {
   return template.map(arg => String(arg).replace(/\{([A-Za-z0-9_]+)\}/g, (_, key) => values[key] || ''));
+}
+
+async function cacheAvatarAssets(avatar) {
+  const items = Array.isArray(avatar.items) ? avatar.items : [];
+  const assets = [];
+  for (const item of items) {
+    const cached = { id: item.id, type: item.type, name: item.name, textureUrl: item.textureUrl || '', modelUrl: item.modelUrl || '', texturePath: '', modelPath: '', hatTransform: item.hatTransform || {} };
+    if (item.textureUrl?.startsWith('data:')) cached.texturePath = writeDataUrl(item.textureUrl, `item-${item.id}-texture.png`);
+    else if (item.textureUrl) cached.texturePath = await downloadAsset(item.textureUrl, `item-${item.id}-texture`);
+    if (item.modelUrl && !item.modelUrl.startsWith('data:')) cached.modelPath = await downloadAsset(item.modelUrl, `item-${item.id}-model`);
+    assets.push(cached);
+  }
+  return assets;
+}
+
+async function downloadAsset(url, prefix) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+    const parsed = new URL(url);
+    const ext = path.extname(parsed.pathname) || '.asset';
+    const file = path.join(cacheDir, safe(`${prefix}${ext}`));
+    fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+    return file;
+  } catch (err) {
+    console.warn(`Could not cache asset ${url}: ${err.message}`);
+    return url;
+  }
+}
+
+function writeDataUrl(dataUrl, name) {
+  const match = String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return '';
+  const file = path.join(cacheDir, safe(name));
+  fs.writeFileSync(file, Buffer.from(match[2], 'base64'));
+  return file;
 }
 
 function mapToRbxlx(map, title) {
@@ -164,20 +202,91 @@ function partToXml(part, index) {
     </Item>`;
 }
 
-function avatarToLua(avatar) {
+function avatarToLua(avatar, assets = []) {
   const colors = avatar.colors || {};
   const items = Array.isArray(avatar.items) ? avatar.items : [];
+  const assetById = new Map(assets.map(asset => [String(asset.id), asset]));
   const lines = [
     '-- Novus Worlds generated avatar appearance',
-    '-- Intended for the launcher/client adapter to run after character spawn.',
     'local Players = game:GetService("Players")',
     'local player = Players.LocalPlayer',
+    '',
+    'local function hexColor(hex)',
+    '  hex = string.gsub(tostring(hex or "#ffffff"), "#", "")',
+    '  local r = tonumber(string.sub(hex, 1, 2), 16) or 255',
+    '  local g = tonumber(string.sub(hex, 3, 4), 16) or 255',
+    '  local b = tonumber(string.sub(hex, 5, 6), 16) or 255',
+    '  return Color3.new(r / 255, g / 255, b / 255)',
+    'end',
+    '',
+    'local function setPartColor(character, name, color)',
+    '  local part = character:FindFirstChild(name)',
+    '  if part and part:IsA("BasePart") then part.Color = color end',
+    'end',
+    '',
+    'local function clearClass(character, className)',
+    '  for _, child in pairs(character:GetChildren()) do',
+    '    if child.ClassName == className then child:Remove() end',
+    '  end',
+    'end',
+    '',
+    'local function makeContent(id)',
+    '  if id == nil or id == "" then return "" end',
+    '  if string.find(id, "http://") == 1 or string.find(id, "https://") == 1 or string.find(id, "rbxasset://") == 1 then return id end',
+    '  return "file:///" .. string.gsub(id, "\\\\", "/")',
+    'end',
+    '',
+    'local function weldToHead(character, handle, transform)',
+    '  local head = character:FindFirstChild("Head")',
+    '  if not head or not handle then return end',
+    '  handle.Anchored = false',
+    '  handle.CanCollide = false',
+    '  handle.CFrame = head.CFrame * CFrame.new(transform.px, transform.py, transform.pz) * CFrame.Angles(math.rad(transform.rx), math.rad(transform.ry), math.rad(transform.rz))',
+    '  local weld = Instance.new("Weld")',
+    '  weld.Name = "NovusHatWeld"',
+    '  weld.Part0 = head',
+    '  weld.Part1 = handle',
+    '  weld.C0 = CFrame.new(transform.px, transform.py, transform.pz) * CFrame.Angles(math.rad(transform.rx), math.rad(transform.ry), math.rad(transform.rz))',
+    '  weld.C1 = CFrame.new()',
+    '  weld.Parent = handle',
+    'end',
+    '',
     'local function apply(character)',
-    `  local colors = { head = "${colors.head || '#f5cd30'}", torso = "${colors.torso || '#0d69ac'}", arms = "${colors.arms || '#f5cd30'}", legs = "${colors.legs || '#1b2a35'}" }`,
-    '  -- Client adapter should translate hex colors to BrickColor/Color3 for R6 body parts.',
+    `  local colors = { head = "${lua(colors.head || '#f5cd30')}", torso = "${lua(colors.torso || '#0d69ac')}", arms = "${lua(colors.arms || '#f5cd30')}", legs = "${lua(colors.legs || '#1b2a35')}" }`,
+    '  setPartColor(character, "Head", hexColor(colors.head))',
+    '  setPartColor(character, "Torso", hexColor(colors.torso))',
+    '  setPartColor(character, "Left Arm", hexColor(colors.arms))',
+    '  setPartColor(character, "Right Arm", hexColor(colors.arms))',
+    '  setPartColor(character, "Left Leg", hexColor(colors.legs))',
+    '  setPartColor(character, "Right Leg", hexColor(colors.legs))',
+    '  clearClass(character, "Shirt")',
+    '  clearClass(character, "Pants")',
   ];
   for (const item of items) {
-    lines.push(`  -- ${item.type}: ${lua(item.name)} legacy=${lua(item.legacyType)} texture=${lua(item.textureUrl || '')} model=${lua(item.modelUrl || '')}`);
+    const asset = assetById.get(String(item.id)) || {};
+    const texture = asset.texturePath || item.textureUrl || '';
+    const model = asset.modelPath || item.modelUrl || '';
+    if (item.type === 'face' && texture) {
+      lines.push(`  do local head = character:FindFirstChild("Head"); if head then local old = head:FindFirstChild("face"); if old then old:Remove() end; local face = Instance.new("Decal"); face.Name = "face"; face.Face = Enum.NormalId.Front; face.Texture = makeContent("${lua(texture)}"); face.Parent = head end end`);
+    }
+    if (item.type === 'shirt' && texture) {
+      lines.push(`  do local shirt = Instance.new("Shirt"); shirt.Name = "NovusShirt"; shirt.ShirtTemplate = makeContent("${lua(texture)}"); shirt.Parent = character end`);
+    }
+    if (item.type === 'pants' && texture) {
+      lines.push(`  do local pants = Instance.new("Pants"); pants.Name = "NovusPants"; pants.PantsTemplate = makeContent("${lua(texture)}"); pants.Parent = character end`);
+    }
+    if (item.type === 'hat' && model) {
+      const t = item.hatTransform || {};
+      const p = t.position || {};
+      const r = t.rotation || {};
+      const s = t.scale || {};
+      lines.push('  do');
+      lines.push(`    local hat = Instance.new("Hat"); hat.Name = "${lua(item.name || 'NovusHat')}"`);
+      lines.push('    local handle = Instance.new("Part"); handle.Name = "Handle"; handle.Size = Vector3.new(2, 1, 2); handle.TopSurface = 0; handle.BottomSurface = 0; handle.Parent = hat');
+      lines.push(`    local mesh = Instance.new("SpecialMesh"); mesh.MeshType = Enum.MeshType.FileMesh; mesh.MeshId = makeContent("${lua(model)}"); mesh.TextureId = makeContent("${lua(texture)}"); mesh.Scale = Vector3.new(${num(s.x, 1)}, ${num(s.y, 1)}, ${num(s.z, 1)}); mesh.Parent = handle`);
+      lines.push(`    hat.Parent = character; weldToHead(character, handle, { px = ${num(p.x, 0)}, py = ${num(p.y, 1.2)}, pz = ${num(p.z, 0)}, rx = ${num(r.x, 0)}, ry = ${num(r.y, 0)}, rz = ${num(r.z, 0)} })`);
+      lines.push('  end');
+    }
   }
   lines.push('end');
   lines.push('if player and player.Character then apply(player.Character) end');
