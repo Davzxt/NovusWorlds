@@ -46,7 +46,8 @@ async function joinGame() {
   const avatarPath = write('avatar.json', JSON.stringify(avatar, null, 2));
   const avatarAssetsPath = write('avatar-assets.json', JSON.stringify(avatarAssets, null, 2));
   const placePath = write(`place-${gameId}.json`, JSON.stringify(place, null, 2));
-  const placeFile = write(`place-${gameId}.rbxl`, mapToRbxlx(place.map || {}, place.title || `Place ${gameId}`));
+  const map = normalizePlayableMap(place.map || {});
+  const placeFile = write(`place-${gameId}.rbxlx`, mapToRbxlx(map, place.title || `Place ${gameId}`));
   const avatarScript = write('avatar-appearance.lua', avatarToLua(avatar.avatar || {}, avatarAssets));
   const target = resolveExecutable(config.playerExe, 'player');
   const serverTarget = resolveExecutable(config.serverExe || config.playerExe, 'server');
@@ -59,7 +60,7 @@ async function joinGame() {
     placeFile,
     novetusSoloScript: novetusSoloScript(avatar.avatar || {}, target),
     novetusClientScript: novetusClientScript(avatar.avatar || {}, target),
-    novetusServerScript: novetusServerScript(serverTarget)
+    novetusServerScript: novetusServerScript(serverTarget, map)
   };
   console.log(`Downloaded join data:\n${joinPath}\n${avatarPath}\n${avatarAssetsPath}\n${placePath}\n${placeFile}\n${avatarScript}`);
   if (isNovetusExe(target.exe) && isNovetusExe(serverTarget.exe) && config.useNovetusLocalServer !== false) {
@@ -76,7 +77,7 @@ async function openStudio() {
   const baseUrl = need('baseUrl');
   const project = await json(`${baseUrl}/api/legacy/studio-project?ticket=${encodeURIComponent(ticket)}`);
   const projectPath = write(`studio-project-${project.gameId || 'new'}.json`, JSON.stringify(project, null, 2));
-  const placeFile = write(`studio-project-${project.gameId || 'new'}.rbxl`, mapToRbxlx(project.map || {}, project.title || 'Novo Mundo'));
+  const placeFile = write(`studio-project-${project.gameId || 'new'}.rbxlx`, mapToRbxlx(normalizePlayableMap(project.map || {}), project.title || 'Novo Mundo'));
   const target = resolveExecutable(config.studioExe, 'studio');
   const args = applyArgs(chooseTemplate('studio', config.studioArgs, target.exe), { projectJson: projectPath, placeFile, novetusStudioScript: novetusStudioScript(target) });
   console.log(`Downloaded studio project:\n${projectPath}\n${placeFile}`);
@@ -199,8 +200,8 @@ function novetusStudioScript(target) {
   return `dofile('${lua(novetusScriptPath(target))}'); _G.CSStudio(true)`;
 }
 
-function novetusServerScript(target) {
-  return `dofile('${lua(novetusScriptPath(target))}'); _G.CSServer(${novetusPort()},20,'','','',false,0,true)`;
+function novetusServerScript(target, map) {
+  return `dofile('${lua(novetusScriptPath(target))}'); ${novetusServerBootstrapScript(map)} _G.CSServer(${novetusPort()},20,'','','',false,0,true)`;
 }
 
 function novetusClientScript(avatar, target) {
@@ -259,6 +260,47 @@ end
 delay(0.5, forceGameLayout)
 delay(1.5, forceGameLayout)
 delay(3.0, forceGameLayout)
+`.replace(/\s+/g, ' ').trim();
+}
+
+function novetusServerBootstrapScript(map) {
+  const playable = normalizePlayableMap(map);
+  const objects = playable.objects.map((part, index) => {
+    const p = part.position || {};
+    const s = part.size || {};
+    const rgb = rgbFromHex(part.color || '#cccccc');
+    const className = part.type === 'SpawnLocation' ? 'SpawnLocation' : 'Part';
+    return [
+      `  if not workspace:FindFirstChild("${lua(part.name || `Part${index + 1}`)}") then`,
+      `    local part = Instance.new("${className}")`,
+      `    part.Name = "${lua(part.name || `Part${index + 1}`)}"`,
+      `    part.Size = Vector3.new(${num(s.x, 4)}, ${num(s.y, 1)}, ${num(s.z, 4)})`,
+      `    part.CFrame = CFrame.new(${num(p.x, 0)}, ${num(p.y, 0)}, ${num(p.z, 0)})`,
+      `    part.Anchored = ${part.anchored === false ? 'false' : 'true'}`,
+      `    part.CanCollide = ${part.canCollide === false ? 'false' : 'true'}`,
+      `    pcall(function() part.Color = Color3.new(${(rgb.r / 255).toFixed(4)}, ${(rgb.g / 255).toFixed(4)}, ${(rgb.b / 255).toFixed(4)}) end)`,
+      '    pcall(function() part.TopSurface = 1; part.BottomSurface = 1 end)',
+      '    part.Parent = workspace',
+      '  end'
+    ].join(' ');
+  }).join(' ');
+  const spawn = playable.spawnPoints[0] || { x: 0, y: 6, z: 0 };
+  return `
+_G.CSScript_PostInit = function()
+  pcall(function()
+${objects}
+    if not workspace:FindFirstChild("SpawnLocation") then
+      local spawn = Instance.new("SpawnLocation")
+      spawn.Name = "SpawnLocation"
+      spawn.Size = Vector3.new(6, 1, 6)
+      spawn.CFrame = CFrame.new(${num(spawn.x, 0)}, ${num(spawn.y, 3)}, ${num(spawn.z, 0)})
+      spawn.Anchored = true
+      spawn.CanCollide = true
+      spawn.Neutral = true
+      spawn.Parent = workspace
+    end
+  end)
+end;
 `.replace(/\s+/g, ' ').trim();
 }
 
@@ -384,10 +426,41 @@ function writeDataUrl(dataUrl, name) {
   return file;
 }
 
+function normalizePlayableMap(map) {
+  const sourceObjects = Array.isArray(map.objects) ? map.objects : [];
+  const objects = sourceObjects.length ? [...sourceObjects] : [{
+    type: 'Part',
+    name: 'Baseplate',
+    position: { x: 0, y: -0.5, z: 0 },
+    size: { x: 80, y: 1, z: 80 },
+    color: '#6b8e23',
+    anchored: true,
+    canCollide: true
+  }];
+  const hasBaseplate = objects.some(part => String(part.name || '').toLowerCase() === 'baseplate');
+  if (!hasBaseplate) {
+    objects.unshift({
+      type: 'Part',
+      name: 'Baseplate',
+      position: { x: 0, y: -0.5, z: 0 },
+      size: { x: 80, y: 1, z: 80 },
+      color: '#6b8e23',
+      anchored: true,
+      canCollide: true
+    });
+  }
+  return {
+    ...map,
+    objects,
+    spawnPoints: Array.isArray(map.spawnPoints) && map.spawnPoints.length ? map.spawnPoints : [{ x: 0, y: 4, z: 0 }]
+  };
+}
+
 function mapToRbxlx(map, title) {
-  const objects = Array.isArray(map.objects) ? map.objects : [];
+  const playable = normalizePlayableMap(map);
+  const objects = Array.isArray(playable.objects) ? playable.objects : [];
   const parts = objects.map((part, index) => partToXml(part, index)).join('\n');
-  const spawn = (Array.isArray(map.spawnPoints) && map.spawnPoints[0]) || { x: 0, y: 3, z: 0 };
+  const spawn = (Array.isArray(playable.spawnPoints) && playable.spawnPoints[0]) || { x: 0, y: 4, z: 0 };
   const spawnXml = spawnToXml(spawn);
   const lockScript = gameplayLockScript(spawn);
   return `<?xml version="1.0" encoding="utf-8"?>
@@ -598,6 +671,13 @@ function hexToRgb(hex) {
   const n = Number.parseInt(value.length === 3 ? value.split('').map(c => c + c).join('') : value, 16);
   const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   return r * 65536 + g * 256 + b;
+}
+
+function rgbFromHex(hex) {
+  const value = String(hex || '').replace('#', '');
+  const n = Number.parseInt(value.length === 3 ? value.split('').map(c => c + c).join('') : value, 16);
+  if (!Number.isFinite(n)) return { r: 204, g: 204, b: 204 };
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
 function num(value, fallback) {
