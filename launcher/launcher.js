@@ -63,8 +63,9 @@ async function joinGame() {
   };
   console.log(`Downloaded join data:\n${joinPath}\n${avatarPath}\n${avatarAssetsPath}\n${placePath}\n${placeFile}\n${avatarScript}`);
   if (isNovetusExe(target.exe) && isNovetusExe(serverTarget.exe) && config.useNovetusLocalServer !== false) {
+    closeExistingNovetus();
     launch(serverTarget, applyArgs(chooseTemplate('server', config.serverArgs, serverTarget.exe), values), 'server');
-    return setTimeout(() => launch(target, applyArgs(chooseTemplate('player', config.playerArgs, target.exe), values), 'player'), Number(config.clientJoinDelayMs || 1800));
+    return setTimeout(() => launch(target, applyArgs(chooseTemplate('player', config.playerArgs, target.exe), values), 'player'), Number(config.clientJoinDelayMs || 4500));
   }
   const args = applyArgs(chooseTemplate('player', config.playerArgs, target.exe), values);
   launch(target, args, 'player');
@@ -164,11 +165,54 @@ function novetusClientScript(avatar, target) {
   const torso = brick(colors.torso, 23);
   const arms = brick(colors.arms, 24);
   const legs = brick(colors.legs, 26);
-  return `dofile('${scriptPath}'); _G.CSConnect(${userId},'127.0.0.1',${novetusPort()},'${username}',0,0,0,${head},${torso},${arms},${arms},${legs},${legs},0,0,0,0,0,'NBC',0,'','','','',0,true,'')`;
+  return `dofile('${scriptPath}'); _G.CSConnect(${userId},'127.0.0.1',${novetusPort()},'${username}',0,0,0,${head},${torso},${arms},${arms},${legs},${legs},0,0,0,0,0,'NBC',0,'','','','',0,true,''); ${novetusGameLayoutScript()}`;
 }
 
 function novetusPort() {
   return Number(config.novetusPort || 53640);
+}
+
+function closeExistingNovetus() {
+  if (process.platform !== 'win32' || config.closeExistingNovetus === false) return;
+  for (const image of ['RobloxApp_client.exe', 'RobloxApp_server.exe', 'RobloxApp_solo.exe']) {
+    try { spawn('taskkill.exe', ['/IM', image, '/F'], { stdio: 'ignore', windowsHide: true }); } catch {}
+  }
+}
+
+function novetusGameLayoutScript() {
+  return `
+pcall(function() game:SetRemoteBuildMode(false) end)
+local function removeByName(root, name)
+  pcall(function()
+    local item = root:FindFirstChild(name, true)
+    if item then item:Remove() end
+  end)
+end
+local function forceGameLayout()
+  pcall(function()
+    local gui = game:GetService('CoreGui'):FindFirstChild('RobloxGui')
+    if gui then
+      removeByName(gui, 'BuildTools')
+      removeByName(gui, 'PropertyTools')
+      removeByName(gui, 'CurrentLoadout')
+      removeByName(gui, 'Backpack')
+    end
+  end)
+  pcall(function()
+    local player = game:GetService('Players').LocalPlayer
+    if player and player.Backpack then player.Backpack:ClearAllChildren() end
+    if player and player.Character then
+      local humanoid = player.Character:FindFirstChild('Humanoid')
+      local torso = player.Character:FindFirstChild('Torso')
+      if humanoid then workspace.CurrentCamera.CameraSubject = humanoid end
+      if torso then workspace.CurrentCamera.CoordinateFrame = CFrame.new(torso.Position + Vector3.new(0, 6, 12), torso.Position) end
+    end
+  end)
+end
+delay(0.5, forceGameLayout)
+delay(1.5, forceGameLayout)
+delay(3.0, forceGameLayout)
+`.replace(/\s+/g, ' ').trim();
 }
 
 function novetusScriptPath(target) {

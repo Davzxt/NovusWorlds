@@ -180,7 +180,8 @@ $install.Add_Click({
       launchMode = "live"
       useNovetusLocalServer = $true
       novetusPort = 53640
-      clientJoinDelayMs = 1800
+      clientJoinDelayMs = 4500
+      closeExistingNovetus = $true
       playerArgs = @("auto")
       serverArgs = @("auto")
       studioArgs = @("auto")
