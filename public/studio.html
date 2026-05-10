@@ -1,1 +1,34 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Studio - Novus Worlds</title><link rel="stylesheet" href="/css/global.css"><link rel="stylesheet" href="/css/studio.css"><script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js"}}</script></head><body class="studio-page"><div class="studio"><div class="toolbar"><b>Novus Studio</b><input id="title" value="Novo Mundo" style="width:170px"><input id="description" placeholder="Descricao" style="width:220px"><button data-tab="view">Vista 3D</button><button data-tab="script">Script</button><button data-tool="translate">Mover</button><button data-tool="rotate">Rotacionar</button><button data-tool="scale">Escalar</button><button data-tool="part">Parte</button><button data-tool="spawn">Spawn</button><button data-tool="script">Script</button><button id="save">Salvar</button><button id="publish">Postar</button><button id="test" class="secondary">Testar</button><a class="btn danger" href="/studio-dashboard.html">Dashboard</a></div><aside class="toolbox"><div class="pane-title">Toolbox</div><button data-shape="Part">Cubo</button><button data-shape="Sphere">Esfera</button><button data-shape="Cylinder">Cilindro</button><button data-tool="spawn">SpawnPoint</button><button data-tool="script">Luau Script</button><button data-tool="part">GUI Frame</button><p class="muted">Delete remove. Ctrl+D duplica. F foca. Ctrl+S salva.</p></aside><main id="viewport" class="viewport"><div id="scriptWorkspace" class="script-workspace hidden"><textarea id="centralScript" spellcheck="false"></textarea><div id="autocomplete" class="autocomplete">game.on | player:teleport | player:setHealth | player:addScore | game.workspace</div></div></main><aside class="side"><div><div class="pane-title">Explorer</div><div id="explorer"></div></div><div><div class="pane-title">Properties</div><div id="props" class="props"></div></div></aside><div class="output">Output: Studio carregado.</div></div><script type="module" src="/js/studio-client.js"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Abrir Studio - Novus Worlds</title>
+  <link rel="stylesheet" href="/css/global.css">
+  <link rel="stylesheet" href="/css/legacy-client.css">
+</head>
+<body>
+  <div data-header></div>
+  <main class="wrap">
+    <section class="panel legacy-launch">
+      <div class="legacy-card">
+        <h1>Abrir Roblox Studio 2012</h1>
+        <p>O Studio agora funciona como ponte. O navegador gera um ticket e chama o launcher local para abrir o Roblox Studio 2012 com o projeto selecionado.</p>
+        <div id="projectInfo" class="legacy-info">Preparando projeto...</div>
+        <div class="legacy-actions">
+          <button id="openStudioBtn">Abrir Studio</button>
+          <button id="copyBtn" class="secondary">Copiar protocolo</button>
+          <a class="btn secondary" href="/studio-dashboard.html">Dashboard</a>
+          <a class="btn secondary" href="/legacy-setup.html">Configurar launcher</a>
+        </div>
+        <p id="status" class="muted"></p>
+      </div>
+      <aside class="legacy-note">
+        <h2>Como salva</h2>
+        <p>O primeiro launcher apenas abre o projeto. Para publicar de volta no site, ele precisa converter o arquivo salvo do Studio para o JSON de mapa Novus e enviar para a API.</p>
+      </aside>
+    </section>
+  </main>
+  <script type="module" src="/js/legacy-studio-launcher.js"></script>
+</body>
+</html>

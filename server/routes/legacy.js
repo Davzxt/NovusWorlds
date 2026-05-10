@@ -83,6 +83,26 @@ router.post('/tickets', (req, res) => {
   });
 });
 
+router.post('/studio-tickets', (req, res) => {
+  const user = getUserByRequest(req);
+  if (!req.session.user) return res.status(401).json({ error: 'Login necessario.' });
+  const gameId = req.body.gameId ? Number(req.body.gameId) : null;
+  if (gameId) {
+    const game = db.prepare('SELECT id, creator_id FROM games WHERE id = ?').get(gameId);
+    if (!game) return res.status(404).json({ error: 'Projeto nao encontrado.' });
+    if (game.creator_id !== req.session.user.id && !req.session.user.is_admin) return res.status(403).json({ error: 'Sem permissao.' });
+  }
+  const ticket = crypto.randomBytes(24).toString('hex');
+  tickets.set(ticket, { userId: user.id, username: user.username, gameId: gameId || 0, mode: 'studio', createdAt: Date.now() });
+  res.json({
+    ticket,
+    gameId,
+    username: user.username,
+    protocolUrl: `novus-studio://edit?ticket=${ticket}&gameId=${gameId || ''}&baseUrl=${encodeURIComponent(baseUrl(req))}`,
+    projectUrl: `${baseUrl(req)}/api/legacy/studio-project?ticket=${ticket}`
+  });
+});
+
 router.get('/join-script', (req, res) => {
   const ticket = String(req.query.ticket || '');
   const entry = tickets.get(ticket);
@@ -143,6 +163,30 @@ router.get('/place/:id', (req, res) => {
     format: 'NovusMapJsonForLegacyAdapter',
     note: 'O launcher precisa converter este JSON para .rbxl/.rbxlx ou inserir as Parts via script no client antigo.',
     map
+  });
+});
+
+router.get('/studio-project', (req, res) => {
+  const ticket = String(req.query.ticket || '');
+  const entry = tickets.get(ticket);
+  if (!entry || entry.mode !== 'studio' || Date.now() - entry.createdAt > 5 * 60 * 1000) return res.status(403).json({ error: 'Ticket invalido.' });
+  let game = null;
+  if (entry.gameId) game = db.prepare('SELECT * FROM games WHERE id = ?').get(entry.gameId);
+  res.json({
+    mode: 'studio',
+    username: entry.username,
+    gameId: entry.gameId || null,
+    title: game?.title || 'Novo Mundo',
+    description: game?.description || '',
+    map: game ? parseJson(game.map_data, {}) : {
+      name: 'Novo Mundo',
+      version: 1,
+      objects: [{ id: 'baseplate', type: 'Part', name: 'Baseplate', position: { x: 0, y: -0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, size: { x: 80, y: 1, z: 80 }, color: '#6B8E23', material: 'Grass', anchored: true, canCollide: true, transparency: 0, children: [] }],
+      spawnPoints: [{ x: 0, y: 3, z: 0 }],
+      ambient: '#404040',
+      skyColor: '#87CEEB'
+    },
+    note: 'Launcher precisa converter este JSON para um arquivo .rbxl/.rbxlx temporario e abrir no Roblox Studio 2012.'
   });
 });
 

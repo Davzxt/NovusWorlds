@@ -1,0 +1,10 @@
+{
+  "name": "novus-legacy-launcher",
+  "version": "0.1.0",
+  "description": "Local protocol launcher for Novus Worlds Roblox 2012 bridge.",
+  "main": "launcher.js",
+  "scripts": {
+    "start": "node launcher.js",
+    "install-protocols": "install-protocols.bat"
+  }
+}

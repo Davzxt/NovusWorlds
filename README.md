@@ -65,6 +65,31 @@ Compatibilidade:
 
 Render hospeda site/API. O client antigo e o game server precisam de launcher/ambiente Windows separado.
 
+## Launcher local
+
+Uma primeira versao do launcher fica em:
+
+```text
+launcher/
+```
+
+Ele registra:
+
+```text
+novus://join
+novus-studio://edit
+```
+
+Uso:
+
+```text
+cd launcher
+copy config.example.json config.json
+install-protocols.bat
+```
+
+Por padrao o launcher vem em `dry-run`, entao ele baixa os arquivos de join/studio e imprime o que abriria. Configure `playerExe`, `studioExe` e mude `launchMode` quando tiver uma build 2012 real pronta.
+
 ## Aviso importante sobre Render gratuito
 
 Render suporta WebSockets em Web Services, mas o plano gratuito tem limites importantes:
