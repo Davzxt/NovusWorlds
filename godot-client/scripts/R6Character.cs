@@ -1,11 +1,12 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
 public partial class R6Character : CharacterBody3D
 {
-    [Export] public float WalkSpeed = 7.2f;
-    [Export] public float JumpVelocity = 7.8f;
+    [Export] public float WalkSpeed = 5.8f;
+    [Export] public float JumpVelocity = 7.35f;
     [Export] public bool IsRemote;
 
     public Vector2 MobileMove { get; set; }
@@ -17,13 +18,16 @@ public partial class R6Character : CharacterBody3D
     private NovusAvatar avatar = new();
     private float animClock;
     private string animState = "idle";
-    private readonly List<Label3D> bubbles = new();
+    private readonly List<ChatBubbleRow> bubbles = new();
     private readonly List<string> bubbleMessages = new();
     private Label3D nameLabel = null!;
     private Node3D forceField = null!;
+    private MeshInstance3D? faceTexturePlane;
     private AudioStreamPlayer3D footstepSound = null!;
     private AudioStreamPlayer3D actionSound = null!;
     private int forceFieldGeneration;
+    private bool localVisualHidden;
+    private string activeFaceTexture = "";
 
     public override void _Ready()
     {
@@ -116,6 +120,16 @@ public partial class R6Character : CharacterBody3D
         if (nameLabel != null) nameLabel.Text = avatar.Username;
     }
 
+    public void SetLocalVisualHidden(bool hidden)
+    {
+        localVisualHidden = hidden;
+        if (visual != null) visual.Visible = !hidden;
+        if (nameLabel != null) nameLabel.Visible = !hidden;
+        foreach (var bubble in bubbles)
+            bubble.Root.Visible = !hidden && !string.IsNullOrWhiteSpace(bubble.Label.Text);
+        if (forceField != null && hidden) forceField.Visible = false;
+    }
+
     public void ShowChatBubble(string message)
     {
         var clean = (message ?? "").Trim();
@@ -143,14 +157,14 @@ public partial class R6Character : CharacterBody3D
 
     private Node3D CreateVisual()
     {
-        return CreateBlockR6Visual();
+        return CreatePyramidR6Visual();
     }
 
-    private Node3D CreateBlockR6Visual()
+    private Node3D CreatePyramidR6Visual()
     {
-        var root = new Node3D { Name = "ClassicR6" };
+        var root = new Node3D { Name = "PyramidR6" };
         AddBlock(root, "Torso", new Vector3(0, 2.1f, 0), new Vector3(2, 2, 1), new Color(0.05f, 0.41f, 0.67f));
-        AddPivotBlock(root, "Head", new Vector3(0, 3.65f, 0), Vector3.Zero, new Vector3(1.25f, 1.25f, 1.25f), new Color(0.96f, 0.8f, 0.19f));
+        AddPyramidHead(root, new Vector3(0, 3.62f, 0), new Color(0.96f, 0.8f, 0.19f));
         AddPivotBlock(root, "LeftArm", new Vector3(-1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f));
         AddPivotBlock(root, "RightArm", new Vector3(1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f));
         AddPivotBlock(root, "LeftLeg", new Vector3(-0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f));
@@ -173,6 +187,47 @@ public partial class R6Character : CharacterBody3D
         mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.68f };
         pivot.AddChild(mesh);
         root.AddChild(pivot);
+    }
+
+    private static void AddPyramidHead(Node root, Vector3 pivotPos, Color color)
+    {
+        var pivot = new Node3D { Name = "Head", Position = pivotPos };
+        var mesh = new MeshInstance3D
+        {
+            Name = "HeadMesh",
+            Mesh = CreatePyramidMesh(),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.72f, TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest }
+        };
+        pivot.AddChild(mesh);
+        root.AddChild(pivot);
+    }
+
+    private static ArrayMesh CreatePyramidMesh()
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        var half = 0.68f;
+        var bottom = -0.58f;
+        var apex = new Vector3(0, 0.76f, 0);
+        var frontLeft = new Vector3(-half, bottom, -half);
+        var frontRight = new Vector3(half, bottom, -half);
+        var backRight = new Vector3(half, bottom, half);
+        var backLeft = new Vector3(-half, bottom, half);
+        AddTriangle(st, frontLeft, frontRight, apex);
+        AddTriangle(st, frontRight, backRight, apex);
+        AddTriangle(st, backRight, backLeft, apex);
+        AddTriangle(st, backLeft, frontLeft, apex);
+        AddTriangle(st, backLeft, backRight, frontRight);
+        AddTriangle(st, backLeft, frontRight, frontLeft);
+        st.GenerateNormals();
+        return st.Commit() as ArrayMesh ?? new ArrayMesh();
+    }
+
+    private static void AddTriangle(SurfaceTool st, Vector3 a, Vector3 b, Vector3 c)
+    {
+        st.AddVertex(a);
+        st.AddVertex(b);
+        st.AddVertex(c);
     }
 
     private static void AddFace(Node3D root)
@@ -223,20 +278,47 @@ public partial class R6Character : CharacterBody3D
     {
         for (var i = 0; i < 3; i++)
         {
-            var label = new Label3D
+            var root = new Node3D
             {
                 Name = $"ChatBubble{i + 1}",
-                Text = "",
                 Visible = false,
-                Position = new Vector3(0, 5.45f + i * 0.34f, 0),
+                Position = new Vector3(0, 5.45f + i * 0.48f, 0)
+            };
+            var backMaterial = new StandardMaterial3D
+            {
+                AlbedoTexture = GD.Load<Texture2D>("res://assets/ui/chat_bubble.png"),
+                AlbedoColor = new Color(1f, 1f, 1f, 0.94f),
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+                TextureFilter = BaseMaterial3D.TextureFilterEnum.Linear,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                NoDepthTest = true
+            };
+            var back = new MeshInstance3D
+            {
+                Name = "BubbleBack",
+                Mesh = new QuadMesh { Size = new Vector2(2.1f, 0.44f) },
+                MaterialOverride = backMaterial
+            };
+            var label = new Label3D
+            {
+                Name = "BubbleText",
+                Text = "",
+                Position = new Vector3(0, -0.015f, -0.01f),
                 PixelSize = 0.0145f,
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
                 Modulate = Colors.Black,
-                OutlineModulate = Colors.White,
-                OutlineSize = 14
+                OutlineModulate = new Color(1, 1, 1, 0.15f),
+                OutlineSize = 2,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                NoDepthTest = true
             };
-            bubbles.Add(label);
-            AddChild(label);
+            root.AddChild(back);
+            root.AddChild(label);
+            bubbles.Add(new ChatBubbleRow(root, label, back));
+            AddChild(root);
         }
     }
 
@@ -281,6 +363,8 @@ public partial class R6Character : CharacterBody3D
 
     private void AddAudio()
     {
+        var footstepStream = GD.Load<AudioStream>("res://assets/audio/bfsl-minifigfoots1.mp3");
+        if (footstepStream is AudioStreamMP3 mp3) mp3.Loop = true;
         actionSound = new AudioStreamPlayer3D
         {
             Stream = GD.Load<AudioStream>("res://assets/audio/button.wav"),
@@ -290,8 +374,8 @@ public partial class R6Character : CharacterBody3D
         AddChild(actionSound);
         footstepSound = new AudioStreamPlayer3D
         {
-            Stream = GD.Load<AudioStream>("res://assets/audio/bfsl-minifigfoots1.mp3"),
-            VolumeDb = -10f,
+            Stream = footstepStream,
+            VolumeDb = -7f,
             UnitSize = 9f
         };
         AddChild(footstepSound);
@@ -312,9 +396,98 @@ public partial class R6Character : CharacterBody3D
 
     private void ApplyFace()
     {
+        if (!string.IsNullOrWhiteSpace(avatar.FaceTextureUrl))
+        {
+            SetBuiltInFaceVisible(false);
+            if (avatar.FaceTextureUrl != activeFaceTexture)
+            {
+                activeFaceTexture = avatar.FaceTextureUrl;
+                _ = ApplyFaceTextureAsync(avatar.FaceTextureUrl);
+            }
+            return;
+        }
+
+        activeFaceTexture = "";
+        if (faceTexturePlane != null) faceTexturePlane.Visible = false;
+        SetBuiltInFaceVisible(true);
         var mouth = visual.FindChild("Mouth", true, false) as MeshInstance3D;
         if (mouth == null) return;
         mouth.Scale = avatar.Face.Contains("serious") ? new Vector3(0.8f, 0.7f, 1) : Vector3.One;
+    }
+
+    private void SetBuiltInFaceVisible(bool visible)
+    {
+        foreach (var name in new[] { "LeftEye", "RightEye", "Mouth" })
+            if (visual.FindChild(name, true, false) is MeshInstance3D mesh)
+                mesh.Visible = visible;
+    }
+
+    private async Task ApplyFaceTextureAsync(string url)
+    {
+        try
+        {
+            var bytes = await LoadImageBytes(url);
+            var image = new Image();
+            var lower = url.ToLowerInvariant();
+            var err = lower.Contains(".jpg") || lower.Contains(".jpeg")
+                ? image.LoadJpgFromBuffer(bytes)
+                : lower.Contains(".webp")
+                    ? image.LoadWebpFromBuffer(bytes)
+                    : image.LoadPngFromBuffer(bytes);
+            if (err != Error.Ok)
+            {
+                err = image.LoadPngFromBuffer(bytes);
+                if (err != Error.Ok) err = image.LoadJpgFromBuffer(bytes);
+            }
+            if (err != Error.Ok) return;
+            var texture = ImageTexture.CreateFromImage(image);
+            var plane = EnsureFaceTexturePlane();
+            plane.Visible = true;
+            plane.MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoTexture = texture,
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor,
+                AlphaScissorThreshold = 0.05f,
+                TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled
+            };
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"Face texture not loaded: {ex.Message}");
+        }
+    }
+
+    private MeshInstance3D EnsureFaceTexturePlane()
+    {
+        if (faceTexturePlane != null && IsInstanceValid(faceTexturePlane)) return faceTexturePlane;
+        var head = visual.FindChild("Head", true, false) as Node3D;
+        faceTexturePlane = new MeshInstance3D
+        {
+            Name = "FaceTexture",
+            Position = new Vector3(0, -0.06f, -0.705f),
+            Mesh = new QuadMesh { Size = new Vector2(0.82f, 0.82f) }
+        };
+        (head ?? visual).AddChild(faceTexturePlane);
+        return faceTexturePlane;
+    }
+
+    private async Task<byte[]> LoadImageBytes(string source)
+    {
+        if (source.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var comma = source.IndexOf(',');
+            if (comma < 0) return Array.Empty<byte>();
+            return Convert.FromBase64String(source[(comma + 1)..]);
+        }
+        var http = new HttpRequest();
+        AddChild(http);
+        var err = http.Request(source);
+        if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
+        var result = await WaitForHttp(http);
+        if (result.ResponseCode >= 400) throw new Exception($"HTTP returned {result.ResponseCode}");
+        return result.Body;
     }
 
     private void AddHatMarker(NovusAvatarItem item)
@@ -347,12 +520,14 @@ public partial class R6Character : CharacterBody3D
             if (result.ResponseCode >= 400 || result.Body.Length == 0) return;
             var state = new GltfState();
             var document = new GltfDocument();
-            if (document.AppendFromBuffer(result.Body, "", state) != Error.Ok) return;
+            var hint = item.ModelUrl.EndsWith(".glb", System.StringComparison.OrdinalIgnoreCase) ? "novus_hat.glb" : "novus_hat.gltf";
+            if (document.AppendFromBuffer(result.Body, hint, state) != Error.Ok) return;
             if (document.GenerateScene(state) is not Node3D model) return;
             model.Name = fallback.Name;
             model.Position = fallback.Position;
             model.RotationDegrees = item.HatRotation;
             model.Scale = item.HatScale;
+            PrepareImportedHat(model);
             visual.AddChild(model);
             fallback.QueueFree();
         }
@@ -360,6 +535,17 @@ public partial class R6Character : CharacterBody3D
         {
             GD.PushWarning($"Hat model fallback for {item.Name}: {ex.Message}");
         }
+    }
+
+    private static void PrepareImportedHat(Node node)
+    {
+        if (node is MeshInstance3D mesh)
+        {
+            mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+            if (mesh.MaterialOverride is StandardMaterial3D mat) mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
+        }
+        foreach (var child in node.GetChildren())
+            PrepareImportedHat(child);
     }
 
     private static Task<HttpResult> WaitForHttp(HttpRequest http)
@@ -378,6 +564,20 @@ public partial class R6Character : CharacterBody3D
     {
         public long ResponseCode;
         public byte[] Body = System.Array.Empty<byte>();
+    }
+
+    private sealed class ChatBubbleRow
+    {
+        public ChatBubbleRow(Node3D root, Label3D label, MeshInstance3D back)
+        {
+            Root = root;
+            Label = label;
+            Back = back;
+        }
+
+        public Node3D Root { get; }
+        public Label3D Label { get; }
+        public MeshInstance3D Back { get; }
     }
 
     private AnimationPlayer CreateAnimations()
@@ -413,8 +613,11 @@ public partial class R6Character : CharacterBody3D
         for (var i = 0; i < bubbles.Count; i++)
         {
             var hasMessage = i < bubbleMessages.Count;
-            bubbles[i].Visible = hasMessage;
-            bubbles[i].Text = hasMessage ? bubbleMessages[i] : "";
+            var message = hasMessage ? bubbleMessages[i] : "";
+            bubbles[i].Root.Visible = hasMessage && !localVisualHidden;
+            bubbles[i].Label.Text = message;
+            if (bubbles[i].Back.Mesh is QuadMesh quad)
+                quad.Size = new Vector2(Mathf.Clamp(1.2f + message.Length * 0.065f, 1.85f, 4.35f), 0.44f);
         }
     }
 

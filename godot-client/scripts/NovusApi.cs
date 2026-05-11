@@ -118,7 +118,11 @@ public static class NovusApi
                     if (transform.TryGetProperty("rotation", out var rot)) parsed.HatRotation = new Vector3(GetFloat(rot, "x", 0), GetFloat(rot, "y", 0), GetFloat(rot, "z", 0));
                     if (transform.TryGetProperty("scale", out var scale)) parsed.HatScale = new Vector3(GetFloat(scale, "x", 1), GetFloat(scale, "y", 1), GetFloat(scale, "z", 1));
                 }
-                if (parsed.Type == "face" && !string.IsNullOrWhiteSpace(parsed.Name)) avatar.Face = parsed.Name;
+                if (parsed.Type == "face")
+                {
+                    if (!string.IsNullOrWhiteSpace(parsed.Name)) avatar.Face = parsed.Name;
+                    if (!string.IsNullOrWhiteSpace(parsed.TextureUrl)) avatar.FaceTextureUrl = parsed.TextureUrl;
+                }
                 avatar.Items.Add(parsed);
             }
         }

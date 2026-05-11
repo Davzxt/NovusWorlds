@@ -29,7 +29,14 @@ public partial class ServerMain : Node
     public void SubmitState(Vector3 position, Vector3 rotation, string animation)
     {
         var id = Multiplayer.GetRemoteSenderId();
-        players[id] = new PlayerState { Position = position, Rotation = rotation, Animation = animation };
+        if (!players.TryGetValue(id, out var state))
+        {
+            state = new PlayerState();
+            players[id] = state;
+        }
+        state.Position = position;
+        state.Rotation = rotation;
+        state.Animation = animation;
         Rpc(nameof(ReceiveState), id, position, rotation, animation);
     }
 

@@ -78,7 +78,7 @@ public static class MapBuilder
             AlbedoColor = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase) ? new Color(0.34f, 0.72f, 0.38f) : displayColor.Lightened(0.08f),
             AlbedoTexture = texture,
             Roughness = 0.88f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled
         };
         for (var x = 0; x < sx; x++)
