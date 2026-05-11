@@ -10,7 +10,7 @@ public static class NovusApi
     {
         if (string.IsNullOrWhiteSpace(ticket)) return new NovusAvatar();
         var http = new HttpRequest();
-        AddChildTemp(http);
+        await AddChildTemp(http);
         var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/avatar?ticket={Uri.EscapeDataString(ticket)}");
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
@@ -22,7 +22,7 @@ public static class NovusApi
     public static async Task<NovusMap> LoadPlace(string baseUrl, string gameId, string ticket = "")
     {
         var http = new HttpRequest();
-        AddChildTemp(http);
+        await AddChildTemp(http);
         var url = $"{baseUrl.TrimEnd('/')}/api/legacy/place/{Uri.EscapeDataString(gameId)}";
         if (!string.IsNullOrWhiteSpace(ticket)) url += $"?ticket={Uri.EscapeDataString(ticket)}";
         var err = http.Request(url);
@@ -39,7 +39,7 @@ public static class NovusApi
     public static async Task<NovusMap> LoadStudioProject(string baseUrl, string ticket)
     {
         var http = new HttpRequest();
-        AddChildTemp(http);
+        await AddChildTemp(http);
         var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/studio-project?ticket={Uri.EscapeDataString(ticket)}");
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
@@ -51,10 +51,12 @@ public static class NovusApi
         return ParseMap(mapJson, root.TryGetProperty("title", out var title) ? title.GetString() ?? "Novo Mundo" : "Novo Mundo");
     }
 
-    private static void AddChildTemp(Node node)
+    private static async Task AddChildTemp(Node node)
     {
         var tree = Engine.GetMainLoop() as SceneTree;
-        tree?.Root.AddChild(node);
+        if (tree?.Root == null) return;
+        tree.Root.CallDeferred(Node.MethodName.AddChild, node);
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
     }
 
     private static Task<HttpResponse> WaitForRequest(HttpRequest http)

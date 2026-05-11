@@ -88,11 +88,14 @@ powershell -ExecutionPolicy Bypass -File tools/run-godot-client.ps1 1 http://loc
 powershell -ExecutionPolicy Bypass -File tools/run-godot-studio.ps1 http://localhost:3000
 powershell -ExecutionPolicy Bypass -File tools/install-godot-export-templates.ps1
 powershell -ExecutionPolicy Bypass -File tools/export-godot-windows.ps1
+powershell -ExecutionPolicy Bypass -File tools/fast-client-download.ps1
 powershell -ExecutionPolicy Bypass -File tools/export-godot-server-linux.ps1
 powershell -ExecutionPolicy Bypass -File tools/export-godot-android.ps1
 ```
 
 Observacao: o Godot instalado e x64, entao os scripts definem `DOTNET_ROOT` para `%USERPROFILE%\.dotnet9-x64`, onde fica o SDK .NET 9 x64 local usado pelo Godot 4.6.2.
+
+Para atualizar o download do client mais rapido depois de mudancas so em C#, rode `tools/NovusFastClientPackager.exe` ou `tools/fast-client-download.ps1`. Isso recompila o DLL do client e recria `public/download/NovusWorldsClient-Windows.zip` usando o ultimo export ja existente. Se voce mudou cenas, assets novos, texturas novas ou arquivos embutidos no pack da Godot, rode `tools/export-godot-windows.ps1` uma vez.
 
 ### Android
 

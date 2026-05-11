@@ -30,6 +30,7 @@ public partial class ClientMain : Node3D
     private bool rotatingCamera;
     private bool firstPerson;
     private bool shiftLock;
+    private bool multiplayerConnected;
     private AudioStreamPlayer clickSound = null!;
     private Texture2D? arrowCursor;
     private Texture2D? dragCursor;
@@ -205,7 +206,7 @@ public partial class ClientMain : Node3D
             if (voidGrace > 0) voidGrace -= delta;
             if (voidGrace <= 0 && player.GlobalPosition.Y < voidKillY) RespawnPlayer(true);
             netClock += delta;
-            if (Multiplayer.MultiplayerPeer != null && Multiplayer.GetUniqueId() != 1 && netClock >= 0.05)
+            if (multiplayerConnected && Multiplayer.GetUniqueId() != 1 && netClock >= 0.05)
             {
                 netClock = 0;
                 RpcId(1, nameof(SubmitState), player.GlobalPosition, player.RotationDegrees, player.CurrentAnimation);
@@ -320,11 +321,12 @@ public partial class ClientMain : Node3D
         Multiplayer.MultiplayerPeer = peer;
         Multiplayer.ConnectedToServer += () =>
         {
+            multiplayerConnected = true;
             GD.Print("Connected to Novus Godot server");
             RpcId(1, nameof(RegisterPlayer), localAvatar.Username);
         };
-        Multiplayer.ConnectionFailed += () => GD.PushWarning("Could not connect to Novus Godot server");
-        Multiplayer.ServerDisconnected += () => GD.PushWarning("Disconnected from Novus Godot server");
+        Multiplayer.ConnectionFailed += () => { multiplayerConnected = false; GD.PushWarning("Could not connect to Novus Godot server"); };
+        Multiplayer.ServerDisconnected += () => { multiplayerConnected = false; GD.PushWarning("Disconnected from Novus Godot server"); };
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
@@ -496,7 +498,7 @@ public partial class ClientMain : Node3D
 
     private void AddTopButton(string text, float x, Action action)
     {
-        var button = new Button { Text = text, Position = new Vector2(x, 0), Size = new Vector2(72, 24), Flat = true };
+        var button = new Button { Text = text, Position = new Vector2(x, 0), Size = new Vector2(72, 24), Flat = true, FocusMode = Control.FocusModeEnum.None };
         button.Pressed += action;
         topBar.AddChild(button);
     }
@@ -531,7 +533,8 @@ public partial class ClientMain : Node3D
         {
             Text = "PULAR",
             Position = new Vector2(1110, 560),
-            Size = new Vector2(130, 72)
+            Size = new Vector2(130, 72),
+            FocusMode = Control.FocusModeEnum.None
         };
         jump.Pressed += () => player?.QueueJump();
         root.AddChild(jump);
@@ -549,6 +552,8 @@ public partial class ClientMain : Node3D
     {
         var msg = Moderate(raw).Trim();
         chatInput.Text = "";
+        chatInput.ReleaseFocus();
+        UpdateCameraMode();
         if (msg.Length == 0) return;
         AddChatLine($"{localAvatar.Username}: {msg}");
         player.ShowChatBubble(msg);

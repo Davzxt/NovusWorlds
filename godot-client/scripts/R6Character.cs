@@ -157,7 +157,27 @@ public partial class R6Character : CharacterBody3D
 
     private Node3D CreateVisual()
     {
-        return CreatePyramidR6Visual();
+        return CreateLocalR6Visual() ?? CreatePyramidR6Visual();
+    }
+
+    private Node3D? CreateLocalR6Visual()
+    {
+        var scene = GD.Load<PackedScene>("res://assets/r6/r6.gltf");
+        if (scene == null) return null;
+        var imported = scene.Instantiate<Node3D>();
+        var sources = CollectLocalR6Sources(imported);
+        imported.QueueFree();
+        if (!sources.HasCompleteRig) return null;
+
+        var root = new Node3D { Name = "LocalR6Asset" };
+        AddImportedPart(root, "Torso", new Vector3(0, 2.1f, 0), Vector3.Zero, new Vector3(2f, 2f, 1f), new Color(0.05f, 0.41f, 0.67f), sources.Torso);
+        AddImportedPart(root, "Head", new Vector3(0, 3.62f, 0), Vector3.Zero, new Vector3(1.38f, 1.38f, 1.38f), new Color(0.96f, 0.8f, 0.19f), sources.Head);
+        AddImportedPart(root, "LeftArm", new Vector3(-1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f), sources.LeftArm);
+        AddImportedPart(root, "RightArm", new Vector3(1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f), sources.RightArm);
+        AddImportedPart(root, "LeftLeg", new Vector3(-0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f), sources.LeftLeg);
+        AddImportedPart(root, "RightLeg", new Vector3(0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f), sources.RightLeg);
+        AddFace(root);
+        return root;
     }
 
     private Node3D CreatePyramidR6Visual()
@@ -187,6 +207,83 @@ public partial class R6Character : CharacterBody3D
         mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.68f };
         pivot.AddChild(mesh);
         root.AddChild(pivot);
+    }
+
+    private static void AddImportedPart(Node root, string name, Vector3 pivotPos, Vector3 meshCenterOffset, Vector3 desiredSize, Color color, Mesh meshResource)
+    {
+        var pivot = new Node3D { Name = name, Position = pivotPos };
+        var mesh = new MeshInstance3D { Name = $"{name}Mesh", Mesh = meshResource };
+        var aabb = meshResource.GetAabb();
+        var sourceSize = aabb.Size;
+        var scale = new Vector3(
+            SafeScale(desiredSize.X, sourceSize.X),
+            SafeScale(desiredSize.Y, sourceSize.Y),
+            SafeScale(desiredSize.Z, sourceSize.Z)
+        );
+        var center = aabb.Position + aabb.Size * 0.5f;
+        mesh.Scale = scale;
+        mesh.Position = meshCenterOffset - Multiply(center, scale);
+        mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.72f, TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest };
+        pivot.AddChild(mesh);
+        root.AddChild(pivot);
+    }
+
+    private static float SafeScale(float desired, float source)
+    {
+        return Mathf.Abs(source) < 0.001f ? 1f : desired / source;
+    }
+
+    private static Vector3 Multiply(Vector3 a, Vector3 b)
+    {
+        return new Vector3(a.X * b.X, a.Y * b.Y, a.Z * b.Z);
+    }
+
+    private static LocalR6Sources CollectLocalR6Sources(Node3D imported)
+    {
+        var sources = new LocalR6Sources();
+        foreach (var child in imported.GetChildren())
+        {
+            if (child is not Node3D node) continue;
+            var mesh = FindFirstMesh(node);
+            if (mesh?.Mesh == null) continue;
+            var pos = node.Position;
+            if (node.Name.ToString().ToLowerInvariant().Contains("pyramid") || pos.Y > 1.9f)
+            {
+                sources.Head = mesh.Mesh;
+            }
+            else if (pos.Y > 0.9f && Mathf.Abs(pos.X) < 0.35f)
+            {
+                sources.Torso = mesh.Mesh;
+            }
+            else if (pos.Y > 0.9f && pos.X < 0)
+            {
+                sources.LeftArm = mesh.Mesh;
+            }
+            else if (pos.Y > 0.9f)
+            {
+                sources.RightArm = mesh.Mesh;
+            }
+            else if (pos.X < 0)
+            {
+                sources.LeftLeg = mesh.Mesh;
+            }
+            else
+            {
+                sources.RightLeg = mesh.Mesh;
+            }
+        }
+        return sources;
+    }
+
+    private static MeshInstance3D? FindFirstMesh(Node node)
+    {
+        if (node is MeshInstance3D mesh) return mesh;
+        foreach (var child in node.GetChildren())
+        {
+            var found = FindFirstMesh(child);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private static void AddPyramidHead(Node root, Vector3 pivotPos, Color color)
@@ -407,12 +504,11 @@ public partial class R6Character : CharacterBody3D
             return;
         }
 
-        activeFaceTexture = "";
-        if (faceTexturePlane != null) faceTexturePlane.Visible = false;
-        SetBuiltInFaceVisible(true);
-        var mouth = visual.FindChild("Mouth", true, false) as MeshInstance3D;
-        if (mouth == null) return;
-        mouth.Scale = avatar.Face.Contains("serious") ? new Vector3(0.8f, 0.7f, 1) : Vector3.One;
+        SetBuiltInFaceVisible(false);
+        var builtIn = $"builtin:{avatar.Face}";
+        if (activeFaceTexture == builtIn) return;
+        activeFaceTexture = builtIn;
+        ApplyGeneratedFaceTexture(avatar.Face);
     }
 
     private void SetBuiltInFaceVisible(bool visible)
@@ -457,6 +553,45 @@ public partial class R6Character : CharacterBody3D
         {
             GD.PushWarning($"Face texture not loaded: {ex.Message}");
         }
+    }
+
+    private void ApplyGeneratedFaceTexture(string face)
+    {
+        var image = Image.CreateEmpty(64, 64, false, Image.Format.Rgba8);
+        image.Fill(new Color(0, 0, 0, 0));
+        DrawRect(image, 20, 19, 4, 11, Colors.Black);
+        DrawRect(image, 40, 19, 4, 11, Colors.Black);
+        if ((face ?? "").Contains("serious", StringComparison.OrdinalIgnoreCase))
+        {
+            DrawRect(image, 22, 42, 20, 4, Colors.Black);
+        }
+        else
+        {
+            DrawRect(image, 21, 41, 4, 4, Colors.Black);
+            DrawRect(image, 25, 45, 4, 4, Colors.Black);
+            DrawRect(image, 29, 47, 6, 3, Colors.Black);
+            DrawRect(image, 35, 45, 4, 4, Colors.Black);
+            DrawRect(image, 39, 41, 4, 4, Colors.Black);
+        }
+        var plane = EnsureFaceTexturePlane();
+        plane.Visible = true;
+        plane.MaterialOverride = new StandardMaterial3D
+        {
+            AlbedoTexture = ImageTexture.CreateFromImage(image),
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor,
+            AlphaScissorThreshold = 0.05f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled
+        };
+    }
+
+    private static void DrawRect(Image image, int x, int y, int width, int height, Color color)
+    {
+        for (var px = x; px < x + width; px++)
+        for (var py = y; py < y + height; py++)
+            if (px >= 0 && py >= 0 && px < image.GetWidth() && py < image.GetHeight())
+                image.SetPixel(px, py, color);
     }
 
     private MeshInstance3D EnsureFaceTexturePlane()
@@ -564,6 +699,18 @@ public partial class R6Character : CharacterBody3D
     {
         public long ResponseCode;
         public byte[] Body = System.Array.Empty<byte>();
+    }
+
+    private sealed class LocalR6Sources
+    {
+        public Mesh? Head;
+        public Mesh? Torso;
+        public Mesh? LeftArm;
+        public Mesh? RightArm;
+        public Mesh? LeftLeg;
+        public Mesh? RightLeg;
+
+        public bool HasCompleteRig => Head != null && Torso != null && LeftArm != null && RightArm != null && LeftLeg != null && RightLeg != null;
     }
 
     private sealed class ChatBubbleRow
