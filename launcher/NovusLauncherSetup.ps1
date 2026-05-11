@@ -130,7 +130,7 @@ $form.Font = New-Object System.Drawing.Font("Verdana", 9)
 $title = Add-Label $form "Novus Worlds Launcher" 24 18 620 30
 $title.Font = New-Object System.Drawing.Font("Verdana", 16, [System.Drawing.FontStyle]::Bold)
 $title.ForeColor = [System.Drawing.Color]::FromArgb(20, 80, 150)
-Add-Label $form "Configure a ponte local para abrir jogos e Studio pelo Novus Client Godot. Baixe e extraia os zips Windows antes de instalar." 26 54 610 38 | Out-Null
+Add-Label $form "Configure a ponte local para abrir jogos e Studio pelo Novus Client Godot. O instalador baixa e atualiza o Client/Studio automaticamente." 26 54 610 38 | Out-Null
 
 Add-Label $form "Pasta de instalacao" 26 108 200 20 | Out-Null
 $installBox = Add-TextBox $form $defaultInstallDir 26 130 500
@@ -161,6 +161,17 @@ $status.ScrollBars = "Vertical"
 $status.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($status)
 
+function Is-InsideFolder($path, $folder) {
+  if (-not $path) { return $true }
+  try {
+    $fullPath = [System.IO.Path]::GetFullPath($path)
+    $fullFolder = [System.IO.Path]::GetFullPath($folder)
+    return $fullPath.StartsWith($fullFolder, [System.StringComparison]::OrdinalIgnoreCase)
+  } catch {
+    return $false
+  }
+}
+
 function Log($text) {
   $status.AppendText($text + [Environment]::NewLine)
 }
@@ -183,8 +194,10 @@ $install.Add_Click({
     $temp = Join-Path $env:TEMP "NovusWorldsInstall"
     New-Item -ItemType Directory -Force -Path $temp | Out-Null
 
-    if (-not $playerBox.Text.Trim() -or -not (Test-Path $playerBox.Text.Trim())) {
-      Log "Baixando Novus Client Windows..."
+    $playerPath = $playerBox.Text.Trim()
+    $shouldRefreshClient = (-not $playerPath) -or (Is-InsideFolder $playerPath $defaultClientRoot)
+    if ($shouldRefreshClient -or -not (Test-Path $playerPath)) {
+      Log "Baixando/atualizando Novus Client Windows..."
       $clientZip = Download-Package "$repoDownloadBase/NovusWorldsClient-Windows.zip" (Join-Path $temp "NovusWorldsClient-Windows.zip")
       Expand-Package $clientZip $defaultClientRoot
       $clientExe = Find-ExeInFolder $defaultClientRoot "NovusWorldsClient.exe"
@@ -193,8 +206,10 @@ $install.Add_Click({
       Log "Client instalado: $clientExe"
     }
 
-    if (-not $studioBox.Text.Trim() -or -not (Test-Path $studioBox.Text.Trim())) {
-      Log "Baixando Novus Studio Windows..."
+    $studioPath = $studioBox.Text.Trim()
+    $shouldRefreshStudio = (-not $studioPath) -or (Is-InsideFolder $studioPath $defaultStudioRoot)
+    if ($shouldRefreshStudio -or -not (Test-Path $studioPath)) {
+      Log "Baixando/atualizando Novus Studio Windows..."
       $studioZip = Download-Package "$repoDownloadBase/NovusWorldsStudio-Windows.zip" (Join-Path $temp "NovusWorldsStudio-Windows.zip")
       Expand-Package $studioZip $defaultStudioRoot
       $studioExe = Find-ExeInFolder $defaultStudioRoot "NovusWorldsStudio.exe"

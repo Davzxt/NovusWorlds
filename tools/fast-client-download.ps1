@@ -23,15 +23,15 @@ Write-Host "Building client C#..."
 Write-Host "Updating exported client assemblies..."
 foreach ($name in @(
   "NovusWorldsClient.dll",
-  "NovusWorldsClient.pdb",
-  "NovusWorldsClient.deps.json",
-  "NovusWorldsClient.runtimeconfig.json"
+  "NovusWorldsClient.pdb"
 )) {
   $source = Join-Path $clientBin $name
   if (Test-Path $source) {
     Copy-Item -LiteralPath $source -Destination (Join-Path $clientData $name) -Force
   }
 }
+
+Write-Host "Keeping exported deps/runtimeconfig untouched so the self-contained .NET runtime keeps working."
 
 Write-Host "Creating site download zip..."
 if (Test-Path $packageDir) { Remove-Item -LiteralPath $packageDir -Recurse -Force }
