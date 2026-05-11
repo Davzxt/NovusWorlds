@@ -19,11 +19,13 @@ public static class NovusApi
         return ParseAvatar(doc.RootElement.TryGetProperty("avatar", out var avatar) ? avatar : doc.RootElement);
     }
 
-    public static async Task<NovusMap> LoadPlace(string baseUrl, string gameId)
+    public static async Task<NovusMap> LoadPlace(string baseUrl, string gameId, string ticket = "")
     {
         var http = new HttpRequest();
         AddChildTemp(http);
-        var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/place/{Uri.EscapeDataString(gameId)}");
+        var url = $"{baseUrl.TrimEnd('/')}/api/legacy/place/{Uri.EscapeDataString(gameId)}";
+        if (!string.IsNullOrWhiteSpace(ticket)) url += $"?ticket={Uri.EscapeDataString(ticket)}";
+        var err = http.Request(url);
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
         if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}");
@@ -77,27 +79,7 @@ public static class NovusApi
             var spawn = spawns[0];
             map.Spawn = new Vector3(GetFloat(spawn, "x", 0), GetFloat(spawn, "y", 4), GetFloat(spawn, "z", 0));
         }
-        if (mapJson.TryGetProperty("objects", out var objects) && objects.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var obj in objects.EnumerateArray())
-            {
-                var part = new NovusPart
-                {
-                    Id = GetString(obj, "id", Guid.NewGuid().ToString("N")),
-                    Type = GetString(obj, "type", "Part"),
-                    Name = GetString(obj, "name", "Part"),
-                    Color = ParseColor(GetString(obj, "color", "#cccccc"), Colors.LightGray),
-                    Material = GetString(obj, "material", "Plastic"),
-                    Anchored = GetBool(obj, "anchored", true),
-                    CanCollide = GetBool(obj, "canCollide", true),
-                    Transparency = GetFloat(obj, "transparency", 0)
-                };
-                if (obj.TryGetProperty("position", out var pos)) part.Position = new Vector3(GetFloat(pos, "x", 0), GetFloat(pos, "y", 0), GetFloat(pos, "z", 0));
-                if (obj.TryGetProperty("rotation", out var rot)) part.Rotation = new Vector3(GetFloat(rot, "x", 0), GetFloat(rot, "y", 0), GetFloat(rot, "z", 0));
-                if (obj.TryGetProperty("size", out var size)) part.Size = new Vector3(GetFloat(size, "x", 4), GetFloat(size, "y", 1), GetFloat(size, "z", 4));
-                map.Objects.Add(part);
-            }
-        }
+        if (mapJson.TryGetProperty("objects", out var objects) && objects.ValueKind == JsonValueKind.Array) ParseParts(objects, map.Objects);
         EnsurePlayable(map);
         return map;
     }
@@ -126,7 +108,9 @@ public static class NovusApi
                     Name = GetString(item, "name", "Item"),
                     Type = GetString(item, "type", ""),
                     ModelUrl = GetString(item, "modelUrl", ""),
-                    TextureUrl = GetString(item, "textureUrl", "")
+                    TextureUrl = GetString(item, "textureUrl", ""),
+                    AssetUrl = GetString(item, "assetUrl", ""),
+                    ThumbnailUrl = GetString(item, "thumbnailUrl", "")
                 };
                 if (item.TryGetProperty("hatTransform", out var transform))
                 {
@@ -156,6 +140,29 @@ public static class NovusApi
             Anchored = true,
             CanCollide = true
         });
+    }
+
+    private static void ParseParts(JsonElement objects, List<NovusPart> target)
+    {
+        foreach (var obj in objects.EnumerateArray())
+        {
+            var part = new NovusPart
+            {
+                Id = GetString(obj, "id", Guid.NewGuid().ToString("N")),
+                Type = GetString(obj, "type", "Part"),
+                Name = GetString(obj, "name", "Part"),
+                Color = ParseColor(GetString(obj, "color", "#cccccc"), Colors.LightGray),
+                Material = GetString(obj, "material", "Plastic"),
+                Anchored = GetBool(obj, "anchored", true),
+                CanCollide = GetBool(obj, "canCollide", true),
+                Transparency = GetFloat(obj, "transparency", 0)
+            };
+            if (obj.TryGetProperty("position", out var pos)) part.Position = new Vector3(GetFloat(pos, "x", 0), GetFloat(pos, "y", 0), GetFloat(pos, "z", 0));
+            if (obj.TryGetProperty("rotation", out var rot)) part.Rotation = new Vector3(GetFloat(rot, "x", 0), GetFloat(rot, "y", 0), GetFloat(rot, "z", 0));
+            if (obj.TryGetProperty("size", out var size)) part.Size = new Vector3(GetFloat(size, "x", 4), GetFloat(size, "y", 1), GetFloat(size, "z", 4));
+            target.Add(part);
+            if (obj.TryGetProperty("children", out var children) && children.ValueKind == JsonValueKind.Array) ParseParts(children, target);
+        }
     }
 
     public static Dictionary<string, object> ToWireMap(NovusMap map)

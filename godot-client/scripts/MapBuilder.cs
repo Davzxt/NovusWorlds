@@ -2,6 +2,8 @@ using Godot;
 
 public static class MapBuilder
 {
+    private static readonly Texture2D StudTexture = GD.Load<Texture2D>("res://assets/environment/stud.webp");
+
     public static Node3D Build(NovusMap map)
     {
         var root = new Node3D { Name = "Workspace" };
@@ -25,6 +27,12 @@ public static class MapBuilder
                 Roughness = part.Material == "Metal" ? 0.25f : 0.8f,
                 Metallic = part.Material == "Metal" ? 0.8f : 0f
             };
+            if (StudTexture != null && part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase))
+            {
+                material.AlbedoColor = Colors.White;
+                material.AlbedoTexture = StudTexture;
+                material.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
+            }
             if (part.Transparency > 0) material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
             mesh.MaterialOverride = material;
             body.AddChild(mesh);
@@ -37,7 +45,7 @@ public static class MapBuilder
             }
             root.AddChild(body);
             if (part.Size.X >= 12 && part.Size.Z >= 12 && part.Transparency <= 0.05f)
-                AddStuds(body, part, displayColor);
+                AddStudTiles(body, part, displayColor);
         }
         return root;
     }
@@ -52,22 +60,33 @@ public static class MapBuilder
         map.Objects.Add(new NovusPart { Id = "stairs-3", Name = "Classic Step 3", Position = new Vector3(24, 2.5f, 24), Size = new Vector3(6, 1, 6), Color = new Color(0.45f, 0.25f, 0.12f), Material = "Plastic" });
     }
 
-    private static void AddStuds(Node3D body, NovusPart part, Color displayColor)
+    private static void AddStudTiles(Node3D body, NovusPart part, Color displayColor)
     {
-        var sx = Mathf.Min(28, Mathf.Max(2, Mathf.FloorToInt(part.Size.X / 4f)));
-        var sz = Mathf.Min(28, Mathf.Max(2, Mathf.FloorToInt(part.Size.Z / 4f)));
-        var mat = new StandardMaterial3D { AlbedoColor = displayColor.Lightened(0.18f), Roughness = 0.82f };
+        if (StudTexture == null) return;
+        var tileSize = 8f;
+        var sx = Mathf.Min(18, Mathf.Max(1, Mathf.CeilToInt(part.Size.X / tileSize)));
+        var sz = Mathf.Min(18, Mathf.Max(1, Mathf.CeilToInt(part.Size.Z / tileSize)));
+        var width = part.Size.X / sx;
+        var depth = part.Size.Z / sz;
+        var mat = new StandardMaterial3D
+        {
+            AlbedoColor = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase) ? Colors.White : displayColor.Lightened(0.28f),
+            AlbedoTexture = StudTexture,
+            Roughness = 0.88f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled
+        };
         for (var x = 0; x < sx; x++)
         for (var z = 0; z < sz; z++)
         {
-            var stud = new MeshInstance3D
+            var tile = new MeshInstance3D
             {
-                Name = "Stud",
-                Mesh = new CylinderMesh { TopRadius = 0.42f, BottomRadius = 0.42f, Height = 0.12f, RadialSegments = 16 },
-                Position = new Vector3((x - (sx - 1) / 2f) * 4f, part.Size.Y / 2f + 0.07f, (z - (sz - 1) / 2f) * 4f),
+                Name = "StudTile",
+                Mesh = new PlaneMesh { Size = new Vector2(width, depth) },
+                Position = new Vector3((x - (sx - 1) / 2f) * width, part.Size.Y / 2f + 0.011f, (z - (sz - 1) / 2f) * depth),
                 MaterialOverride = mat
             };
-            body.AddChild(stud);
+            body.AddChild(tile);
         }
     }
 }

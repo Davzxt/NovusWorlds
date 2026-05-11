@@ -1,6 +1,8 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
 
 public partial class ClientMain : Node3D
 {
@@ -38,21 +40,17 @@ public partial class ClientMain : Node3D
         SetupInput();
         SetupAssets();
         var args = OS.GetCmdlineArgs();
-        var gameId = ReadArg(args, "--game", "1");
-        var baseUrl = ReadArg(args, "--base-url", "http://localhost:3000");
-        var ticket = ReadArg(args, "--ticket", "");
-        var serverHost = ReadArg(args, "--server", "127.0.0.1");
-        var serverPort = ReadIntArg(args, "--port", 53640);
-        try { map = await NovusApi.LoadPlace(baseUrl, gameId); }
+        var launch = ReadLaunchData(args);
+        try { map = await NovusApi.LoadPlace(launch.BaseUrl, launch.GameId, launch.Ticket); }
         catch (Exception ex) { GD.PushWarning($"Using local baseplate: {ex.Message}"); NovusApi.EnsurePlayable(map); }
         AddChild(MapBuilder.Build(map));
         SetupLighting();
         SpawnPlayer();
-        try { localAvatar = await NovusApi.LoadAvatar(baseUrl, ticket); player.SetAvatar(localAvatar); player.SetDisplayName(localAvatar.Username); }
+        try { localAvatar = await NovusApi.LoadAvatar(launch.BaseUrl, launch.Ticket); player.SetAvatar(localAvatar); player.SetDisplayName(localAvatar.Username); }
         catch (Exception ex) { GD.PushWarning($"Avatar not loaded: {ex.Message}"); }
         SetupDesktopHud();
         if (IsMobileDevice()) SetupMobileHud();
-        ConnectMultiplayer(serverHost, serverPort);
+        ConnectMultiplayer(launch.ServerHost, launch.ServerPort);
     }
 
     public override void _Input(InputEvent ev)
@@ -121,7 +119,7 @@ public partial class ClientMain : Node3D
             else if (drag.Index == cameraTouchId)
             {
                 yaw -= drag.Relative.X * 0.18f;
-                pitch = Mathf.Clamp(pitch - drag.Relative.Y * 0.18f, -65, 10);
+                pitch = Mathf.Clamp(pitch - drag.Relative.Y * 0.18f, 8f, 68f);
             }
         }
     }
@@ -205,10 +203,17 @@ public partial class ClientMain : Node3D
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void ReceiveChat(long id, string message)
     {
+        if (id == Multiplayer.GetUniqueId()) return;
         var clean = Moderate(message);
         AddChatLine($"{PlayerName(id)}: {clean}");
-        if (id == Multiplayer.GetUniqueId()) player.ShowChatBubble(clean);
-        else if (remotePlayers.TryGetValue(id, out var remote) && remote is R6Character r6) r6.ShowChatBubble(clean);
+        if (remotePlayers.TryGetValue(id, out var remote) && remote is R6Character r6) r6.ShowChatBubble(clean);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void ReceiveChatHistory(string history)
+    {
+        foreach (var line in (history ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            AddChatLine(line);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -240,15 +245,27 @@ public partial class ClientMain : Node3D
     {
         var env = new WorldEnvironment();
         var sky = new Sky();
-        sky.SkyMaterial = new ProceduralSkyMaterial
+        var panorama = GD.Load<Texture2D>("res://assets/environment/skybox.webp");
+        if (panorama != null)
         {
-            SkyTopColor = new Color(0.34f, 0.62f, 1f),
-            SkyHorizonColor = new Color(0.92f, 0.96f, 1f),
-            GroundBottomColor = new Color(0.72f, 0.78f, 0.86f),
-            GroundHorizonColor = new Color(0.98f, 0.98f, 1f),
-            SunAngleMax = 18f,
-            SunCurve = 0.08f
-        };
+            sky.SkyMaterial = new PanoramaSkyMaterial
+            {
+                Panorama = panorama,
+                EnergyMultiplier = 1.0f
+            };
+        }
+        else
+        {
+            sky.SkyMaterial = new ProceduralSkyMaterial
+            {
+                SkyTopColor = new Color(0.34f, 0.62f, 1f),
+                SkyHorizonColor = new Color(0.92f, 0.96f, 1f),
+                GroundBottomColor = new Color(0.72f, 0.78f, 0.86f),
+                GroundHorizonColor = new Color(0.98f, 0.98f, 1f),
+                SunAngleMax = 18f,
+                SunCurve = 0.08f
+            };
+        }
         env.Environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
@@ -377,12 +394,9 @@ public partial class ClientMain : Node3D
         var msg = Moderate(raw).Trim();
         chatInput.Text = "";
         if (msg.Length == 0) return;
-        if (Multiplayer.MultiplayerPeer == null || Multiplayer.GetUniqueId() == 1)
-        {
-            AddChatLine($"{localAvatar.Username}: {msg}");
-            player.ShowChatBubble(msg);
-        }
-        else RpcId(1, nameof(SendChat), msg);
+        AddChatLine($"{localAvatar.Username}: {msg}");
+        player.ShowChatBubble(msg);
+        if (Multiplayer.MultiplayerPeer != null && Multiplayer.GetUniqueId() != 1) RpcId(1, nameof(SendChat), msg);
         PlaySwitch();
     }
 
@@ -469,5 +483,58 @@ public partial class ClientMain : Node3D
     {
         for (var i = 0; i < args.Length - 1; i++) if (args[i] == name && int.TryParse(args[i + 1], out var value)) return value;
         return fallback;
+    }
+
+    private static LaunchData ReadLaunchData(string[] args)
+    {
+        var launch = new LaunchData
+        {
+            GameId = ReadArg(args, "--game", "1"),
+            BaseUrl = ReadArg(args, "--base-url", "http://localhost:3000"),
+            Ticket = ReadArg(args, "--ticket", ""),
+            ServerHost = ReadArg(args, "--server", "127.0.0.1"),
+            ServerPort = ReadIntArg(args, "--port", 53640)
+        };
+        var joinJson = ReadArg(args, "--join-json", "");
+        if (string.IsNullOrWhiteSpace(joinJson) || !File.Exists(joinJson)) return launch;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(joinJson));
+            var root = doc.RootElement;
+            launch.GameId = GetJsonString(root, "gameId", launch.GameId);
+            launch.BaseUrl = GetJsonString(root, "baseUrl", launch.BaseUrl);
+            launch.Ticket = GetJsonString(root, "ticket", launch.Ticket);
+            launch.ServerHost = GetJsonString(root, "serverHost", launch.ServerHost);
+            launch.ServerPort = GetJsonInt(root, "serverPort", launch.ServerPort);
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"Could not parse join json: {ex.Message}");
+        }
+        return launch;
+    }
+
+    private static string GetJsonString(JsonElement root, string key, string fallback)
+    {
+        if (!root.TryGetProperty(key, out var value)) return fallback;
+        if (value.ValueKind == JsonValueKind.String) return value.GetString() ?? fallback;
+        if (value.ValueKind == JsonValueKind.Number) return value.ToString();
+        return fallback;
+    }
+
+    private static int GetJsonInt(JsonElement root, string key, int fallback)
+    {
+        if (!root.TryGetProperty(key, out var value)) return fallback;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)) return number;
+        return int.TryParse(GetJsonString(root, key, ""), out var parsed) ? parsed : fallback;
+    }
+
+    private sealed class LaunchData
+    {
+        public string GameId = "1";
+        public string BaseUrl = "http://localhost:3000";
+        public string Ticket = "";
+        public string ServerHost = "127.0.0.1";
+        public int ServerPort = 53640;
     }
 }

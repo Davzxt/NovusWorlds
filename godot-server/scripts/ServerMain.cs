@@ -5,6 +5,7 @@ using System.Collections.Generic;
 public partial class ServerMain : Node
 {
     private readonly Dictionary<long, PlayerState> players = new();
+    private readonly List<string> chatHistory = new();
 
     public override void _Ready()
     {
@@ -41,6 +42,7 @@ public partial class ServerMain : Node
         var id = Multiplayer.GetRemoteSenderId();
         if (!players.ContainsKey(id)) players[id] = new PlayerState();
         players[id].Username = string.IsNullOrWhiteSpace(username) ? $"Player{id}" : username.Left(20);
+        if (chatHistory.Count > 0) RpcId(id, nameof(ReceiveChatHistory), string.Join("\n", chatHistory));
         Rpc(nameof(PlayerJoined), id, players[id].Username);
     }
 
@@ -51,11 +53,18 @@ public partial class ServerMain : Node
     public void SendChat(string message)
     {
         var id = Multiplayer.GetRemoteSenderId();
-        Rpc(nameof(ReceiveChat), id, Moderate(message).Left(120));
+        var clean = Moderate(message).Left(120);
+        var username = players.TryGetValue(id, out var state) && !string.IsNullOrWhiteSpace(state.Username) ? state.Username : $"Player{id}";
+        chatHistory.Add($"{username}: {clean}");
+        if (chatHistory.Count > 50) chatHistory.RemoveAt(0);
+        Rpc(nameof(ReceiveChat), id, clean);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void ReceiveChat(long id, string message) {}
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void ReceiveChatHistory(string history) {}
 
     private void OnPeerConnected(long id)
     {

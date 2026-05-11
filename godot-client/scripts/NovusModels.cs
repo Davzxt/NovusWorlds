@@ -42,6 +42,8 @@ public sealed class NovusAvatarItem
     public string Type = "";
     public string ModelUrl = "";
     public string TextureUrl = "";
+    public string AssetUrl = "";
+    public string ThumbnailUrl = "";
     public Vector3 HatPosition = new(0, 1.2f, 0);
     public Vector3 HatRotation = Vector3.Zero;
     public Vector3 HatScale = Vector3.One;

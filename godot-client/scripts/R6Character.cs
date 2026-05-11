@@ -1,4 +1,6 @@
 using Godot;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 public partial class R6Character : CharacterBody3D
 {
@@ -106,6 +108,74 @@ public partial class R6Character : CharacterBody3D
     }
 
     private Node3D CreateVisual()
+    {
+        var imported = CreateImportedR6Visual();
+        return imported ?? CreateBlockR6Visual();
+    }
+
+    private Node3D CreateImportedR6Visual()
+    {
+        var scene = GD.Load<PackedScene>("res://assets/r6/r6.gltf");
+        if (scene == null) return null;
+        var source = scene.Instantiate<Node3D>();
+        var meshes = new List<MeshInstance3D>();
+        CollectMeshes(source, meshes);
+        if (meshes.Count < 6) return null;
+
+        meshes.Sort((a, b) => a.GlobalPosition.Y.CompareTo(b.GlobalPosition.Y));
+        var root = new Node3D { Name = "ClassicR6" };
+        const float modelScale = 1.58f;
+
+        var legA = meshes[0];
+        var legB = meshes[1];
+        var head = meshes[^1];
+        var middle = new List<MeshInstance3D> { meshes[2], meshes[3], meshes[4] };
+        middle.Sort((a, b) => Mathf.Abs(a.GlobalPosition.X).CompareTo(Mathf.Abs(b.GlobalPosition.X)));
+        var torso = middle[0];
+        var armA = middle[1];
+        var armB = middle[2];
+
+        AdoptPart(root, "Torso", torso, modelScale, false);
+        AdoptPart(root, armA.GlobalPosition.X < armB.GlobalPosition.X ? "LeftArm" : "RightArm", armA, modelScale, true);
+        AdoptPart(root, armA.GlobalPosition.X < armB.GlobalPosition.X ? "RightArm" : "LeftArm", armB, modelScale, true);
+        AdoptPart(root, legA.GlobalPosition.X < legB.GlobalPosition.X ? "LeftLeg" : "RightLeg", legA, modelScale, true);
+        AdoptPart(root, legA.GlobalPosition.X < legB.GlobalPosition.X ? "RightLeg" : "LeftLeg", legB, modelScale, true);
+        AdoptPart(root, "Head", head, modelScale, false);
+        AddFace(root);
+        source.QueueFree();
+        return root;
+    }
+
+    private static void CollectMeshes(Node node, List<MeshInstance3D> meshes)
+    {
+        if (node is MeshInstance3D mesh && mesh.Mesh != null) meshes.Add(mesh);
+        foreach (var child in node.GetChildren()) CollectMeshes(child, meshes);
+    }
+
+    private static void AdoptPart(Node3D root, string name, MeshInstance3D mesh, float scale, bool pivotAtTop)
+    {
+        var sourcePosition = mesh.GlobalPosition;
+        var aabb = mesh.GetAabb();
+        var localTop = aabb.Position.Y + aabb.Size.Y;
+        mesh.GetParent()?.RemoveChild(mesh);
+        var pivot = new Node3D { Name = name };
+        if (pivotAtTop)
+        {
+            pivot.Position = new Vector3(sourcePosition.X * scale, (sourcePosition.Y + localTop) * scale, sourcePosition.Z * scale);
+            mesh.Position = new Vector3(0, -localTop * scale, 0);
+        }
+        else
+        {
+            pivot.Position = sourcePosition * scale;
+            mesh.Position = Vector3.Zero;
+        }
+        mesh.Name = $"{name}Mesh";
+        mesh.Scale *= scale;
+        pivot.AddChild(mesh);
+        root.AddChild(pivot);
+    }
+
+    private Node3D CreateBlockR6Visual()
     {
         var root = new Node3D { Name = "ClassicR6" };
         AddBlock(root, "Torso", new Vector3(0, 2.1f, 0), new Vector3(2, 2, 1), new Color(0.05f, 0.41f, 0.67f));
@@ -238,16 +308,64 @@ public partial class R6Character : CharacterBody3D
     private void AddHatMarker(NovusAvatarItem item)
     {
         if (visual.HasNode($"NovusHat_{item.Id}")) return;
+        var hatY = 4.35f + (item.HatPosition.Y - 1.2f) * 0.15f;
         var hat = new MeshInstance3D
         {
             Name = $"NovusHat_{item.Id}",
             Mesh = new CylinderMesh { TopRadius = 0.95f, BottomRadius = 1.15f, Height = 0.45f },
-            Position = new Vector3(item.HatPosition.X, 4.48f + item.HatPosition.Y * 0.22f, item.HatPosition.Z),
+            Position = new Vector3(item.HatPosition.X, hatY, item.HatPosition.Z),
             RotationDegrees = item.HatRotation,
             Scale = item.HatScale
         };
         hat.MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.08f), Roughness = 0.55f };
         visual.AddChild(hat);
+        _ = TryReplaceHatWithModel(item, hat);
+    }
+
+    private async Task TryReplaceHatWithModel(NovusAvatarItem item, MeshInstance3D fallback)
+    {
+        if (string.IsNullOrWhiteSpace(item.ModelUrl) || !IsInstanceValid(fallback)) return;
+        try
+        {
+            var http = new HttpRequest();
+            AddChild(http);
+            var err = http.Request(item.ModelUrl);
+            if (err != Error.Ok) return;
+            var result = await WaitForHttp(http);
+            if (result.ResponseCode >= 400 || result.Body.Length == 0) return;
+            var state = new GltfState();
+            var document = new GltfDocument();
+            if (document.AppendFromBuffer(result.Body, "", state) != Error.Ok) return;
+            if (document.GenerateScene(state) is not Node3D model) return;
+            model.Name = fallback.Name;
+            model.Position = fallback.Position;
+            model.RotationDegrees = item.HatRotation;
+            model.Scale = item.HatScale;
+            visual.AddChild(model);
+            fallback.QueueFree();
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushWarning($"Hat model fallback for {item.Name}: {ex.Message}");
+        }
+    }
+
+    private static Task<HttpResult> WaitForHttp(HttpRequest http)
+    {
+        var tcs = new TaskCompletionSource<HttpResult>();
+        http.RequestCompleted += (result, responseCode, headers, body) =>
+        {
+            http.QueueFree();
+            if (result != (long)HttpRequest.Result.Success) tcs.TrySetException(new System.Exception($"HTTP result {result}"));
+            else tcs.TrySetResult(new HttpResult { ResponseCode = responseCode, Body = body });
+        };
+        return tcs.Task;
+    }
+
+    private sealed class HttpResult
+    {
+        public long ResponseCode;
+        public byte[] Body = System.Array.Empty<byte>();
     }
 
     private AnimationPlayer CreateAnimations()

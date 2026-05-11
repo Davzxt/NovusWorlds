@@ -92,7 +92,7 @@ router.post('/tickets', (req, res) => {
     serverPort: gameServerPort(),
     joinDataUrl: `${baseUrl(req)}/api/legacy/tickets/${ticket}`,
     protocolUrl: `novus://join?ticket=${ticket}&gameId=${gameId}&baseUrl=${encodeURIComponent(baseUrl(req))}&server=${encodeURIComponent(gameServerHost(req))}&port=${gameServerPort()}`,
-    placeUrl: `${baseUrl(req)}/api/legacy/place/${gameId}`
+    placeUrl: `${baseUrl(req)}/api/legacy/place/${gameId}?ticket=${ticket}`
   });
 });
 
@@ -109,7 +109,7 @@ router.get('/tickets/:ticket', (req, res) => {
     serverHost: gameServerHost(req),
     serverPort: gameServerPort(),
     avatar: getResolvedAvatar(user, req),
-    placeUrl: `${baseUrl(req)}/api/legacy/place/${entry.gameId}`
+    placeUrl: `${baseUrl(req)}/api/legacy/place/${entry.gameId}?ticket=${ticket}`
   });
 });
 
@@ -176,7 +176,12 @@ router.get('/avatar.xml', (req, res) => {
 });
 
 router.get('/place/:id', (req, res) => {
-  const game = db.prepare('SELECT * FROM games WHERE id = ? AND is_active = 1').get(req.params.id);
+  const ticket = String(req.query.ticket || '');
+  const entry = tickets.get(ticket);
+  const allowTicket = entry && Number(entry.gameId) === Number(req.params.id) && Date.now() - entry.createdAt <= TICKET_TTL_MS;
+  const game = allowTicket
+    ? db.prepare('SELECT * FROM games WHERE id = ?').get(req.params.id)
+    : db.prepare('SELECT * FROM games WHERE id = ? AND is_active = 1').get(req.params.id);
   if (!game) return res.status(404).json({ error: 'Jogo nao encontrado.' });
   const map = parseJson(game.map_data, {});
   res.json({
