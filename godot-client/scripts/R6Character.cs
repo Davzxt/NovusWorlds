@@ -4,8 +4,8 @@ using System.Threading.Tasks;
 
 public partial class R6Character : CharacterBody3D
 {
-    [Export] public float WalkSpeed = 8.5f;
-    [Export] public float JumpVelocity = 8.4f;
+    [Export] public float WalkSpeed = 7.2f;
+    [Export] public float JumpVelocity = 7.8f;
     [Export] public bool IsRemote;
 
     public Vector2 MobileMove { get; set; }
@@ -17,9 +17,13 @@ public partial class R6Character : CharacterBody3D
     private NovusAvatar avatar = new();
     private float animClock;
     private string animState = "idle";
-    private Label3D bubble = null!;
+    private readonly List<Label3D> bubbles = new();
+    private readonly List<string> bubbleMessages = new();
     private Label3D nameLabel = null!;
-    private MeshInstance3D forceField = null!;
+    private Node3D forceField = null!;
+    private AudioStreamPlayer3D footstepSound = null!;
+    private AudioStreamPlayer3D actionSound = null!;
+    private int forceFieldGeneration;
 
     public override void _Ready()
     {
@@ -32,6 +36,7 @@ public partial class R6Character : CharacterBody3D
         AddNameLabel();
         AddBubble();
         AddForceField();
+        AddAudio();
     }
 
     public override void _PhysicsProcess(double delta)
@@ -46,11 +51,17 @@ public partial class R6Character : CharacterBody3D
         var velocity = Velocity;
         velocity.X = direction.X * WalkSpeed;
         velocity.Z = direction.Z * WalkSpeed;
+        var wantsJump = Input.IsActionJustPressed("jump") || mobileJumpQueued;
         if (!IsOnFloor()) velocity.Y -= gravity * 1.85f * (float)delta;
-        else if (Input.IsActionJustPressed("jump") || mobileJumpQueued) velocity.Y = JumpVelocity;
+        else if (wantsJump)
+        {
+            velocity.Y = JumpVelocity;
+            PlayActionSound();
+        }
         mobileJumpQueued = false;
         Velocity = velocity;
         MoveAndSlide();
+        UpdateFootsteps(direction.Length() > 0.05f && IsOnFloor());
         if (direction.Length() > 0.05f)
         {
             LookAt(GlobalPosition + direction, Vector3.Up);
@@ -69,6 +80,17 @@ public partial class R6Character : CharacterBody3D
     public void QueueJump()
     {
         mobileJumpQueued = true;
+    }
+
+    public void Respawn(Vector3 position)
+    {
+        GlobalPosition = position;
+        Velocity = Vector3.Zero;
+        mobileJumpQueued = false;
+        animState = "idle";
+        AnimateClassic(0);
+        if (forceField != null) forceField.Visible = true;
+        HideForceFieldLater();
     }
 
     public void SetAvatar(NovusAvatar nextAvatar)
@@ -96,83 +118,32 @@ public partial class R6Character : CharacterBody3D
 
     public void ShowChatBubble(string message)
     {
-        if (bubble == null) return;
-        bubble.Text = message;
-        bubble.Visible = true;
-        GetTree().CreateTimer(5).Timeout += () => { if (IsInstanceValid(bubble)) bubble.Visible = false; };
+        var clean = (message ?? "").Trim();
+        if (clean.Length == 0) return;
+        var bubbleText = clean.Length > 58 ? clean[..58] : clean;
+        bubbleMessages.Insert(0, bubbleText);
+        while (bubbleMessages.Count > 3) bubbleMessages.RemoveAt(bubbleMessages.Count - 1);
+        UpdateBubbleLabels();
+        var token = bubbleText;
+        GetTree().CreateTimer(5).Timeout += () =>
+        {
+            bubbleMessages.Remove(token);
+            UpdateBubbleLabels();
+        };
     }
 
     public void HideForceFieldLater()
     {
-        GetTree().CreateTimer(7).Timeout += () => { if (IsInstanceValid(forceField)) forceField.Visible = false; };
+        var generation = ++forceFieldGeneration;
+        GetTree().CreateTimer(7).Timeout += () =>
+        {
+            if (generation == forceFieldGeneration && IsInstanceValid(forceField)) forceField.Visible = false;
+        };
     }
 
     private Node3D CreateVisual()
     {
-        var imported = CreateImportedR6Visual();
-        return imported ?? CreateBlockR6Visual();
-    }
-
-    private Node3D CreateImportedR6Visual()
-    {
-        var scene = GD.Load<PackedScene>("res://assets/r6/r6.gltf");
-        if (scene == null) return null;
-        var source = scene.Instantiate<Node3D>();
-        var meshes = new List<MeshInstance3D>();
-        CollectMeshes(source, meshes);
-        if (meshes.Count < 6) return null;
-
-        meshes.Sort((a, b) => a.GlobalPosition.Y.CompareTo(b.GlobalPosition.Y));
-        var root = new Node3D { Name = "ClassicR6" };
-        const float modelScale = 1.58f;
-
-        var legA = meshes[0];
-        var legB = meshes[1];
-        var head = meshes[^1];
-        var middle = new List<MeshInstance3D> { meshes[2], meshes[3], meshes[4] };
-        middle.Sort((a, b) => Mathf.Abs(a.GlobalPosition.X).CompareTo(Mathf.Abs(b.GlobalPosition.X)));
-        var torso = middle[0];
-        var armA = middle[1];
-        var armB = middle[2];
-
-        AdoptPart(root, "Torso", torso, modelScale, false);
-        AdoptPart(root, armA.GlobalPosition.X < armB.GlobalPosition.X ? "LeftArm" : "RightArm", armA, modelScale, true);
-        AdoptPart(root, armA.GlobalPosition.X < armB.GlobalPosition.X ? "RightArm" : "LeftArm", armB, modelScale, true);
-        AdoptPart(root, legA.GlobalPosition.X < legB.GlobalPosition.X ? "LeftLeg" : "RightLeg", legA, modelScale, true);
-        AdoptPart(root, legA.GlobalPosition.X < legB.GlobalPosition.X ? "RightLeg" : "LeftLeg", legB, modelScale, true);
-        AdoptPart(root, "Head", head, modelScale, false);
-        AddFace(root);
-        source.QueueFree();
-        return root;
-    }
-
-    private static void CollectMeshes(Node node, List<MeshInstance3D> meshes)
-    {
-        if (node is MeshInstance3D mesh && mesh.Mesh != null) meshes.Add(mesh);
-        foreach (var child in node.GetChildren()) CollectMeshes(child, meshes);
-    }
-
-    private static void AdoptPart(Node3D root, string name, MeshInstance3D mesh, float scale, bool pivotAtTop)
-    {
-        var sourcePosition = mesh.GlobalPosition;
-        var aabb = mesh.GetAabb();
-        var localTop = aabb.Position.Y + aabb.Size.Y;
-        mesh.GetParent()?.RemoveChild(mesh);
-        var pivot = new Node3D { Name = name };
-        if (pivotAtTop)
-        {
-            pivot.Position = new Vector3(sourcePosition.X * scale, (sourcePosition.Y + localTop) * scale, sourcePosition.Z * scale);
-            mesh.Position = new Vector3(0, -localTop * scale, 0);
-        }
-        else
-        {
-            pivot.Position = sourcePosition * scale;
-            mesh.Position = Vector3.Zero;
-        }
-        mesh.Name = $"{name}Mesh";
-        mesh.Scale *= scale;
-        pivot.AddChild(mesh);
-        root.AddChild(pivot);
+        return CreateBlockR6Visual();
     }
 
     private Node3D CreateBlockR6Visual()
@@ -250,39 +221,80 @@ public partial class R6Character : CharacterBody3D
 
     private void AddBubble()
     {
-        bubble = new Label3D
+        for (var i = 0; i < 3; i++)
         {
-            Name = "ChatBubble",
-            Text = "",
-            Visible = false,
-            Position = new Vector3(0, 5.45f, 0),
-            PixelSize = 0.018f,
-            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-            Modulate = Colors.White,
-            OutlineModulate = Colors.Black,
-            OutlineSize = 8
-        };
-        AddChild(bubble);
+            var label = new Label3D
+            {
+                Name = $"ChatBubble{i + 1}",
+                Text = "",
+                Visible = false,
+                Position = new Vector3(0, 5.45f + i * 0.34f, 0),
+                PixelSize = 0.0145f,
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                Modulate = Colors.Black,
+                OutlineModulate = Colors.White,
+                OutlineSize = 14
+            };
+            bubbles.Add(label);
+            AddChild(label);
+        }
     }
 
     private void AddForceField()
     {
-        forceField = new MeshInstance3D
+        forceField = new Node3D { Name = "ForceField" };
+        var purple = new Color(0.55f, 0.02f, 1f, 0.82f);
+        var gold = new Color(1f, 0.92f, 0.2f, 0.62f);
+        foreach (var x in new[] { -1.28f, 1.28f })
+        foreach (var z in new[] { -0.68f, 0.68f })
+            AddForceFieldBar(forceField, new Vector3(x, 2.15f, z), new Vector3(0.08f, 4.25f, 0.08f), purple);
+        foreach (var y in new[] { 0.08f, 4.25f })
+        foreach (var z in new[] { -0.68f, 0.68f })
+            AddForceFieldBar(forceField, new Vector3(0, y, z), new Vector3(2.64f, 0.08f, 0.08f), purple);
+        foreach (var y in new[] { 0.08f, 4.25f })
+        foreach (var x in new[] { -1.28f, 1.28f })
+            AddForceFieldBar(forceField, new Vector3(x, y, 0), new Vector3(0.08f, 0.08f, 1.42f), purple);
+        AddForceFieldBar(forceField, new Vector3(0, 3.8f, -0.72f), new Vector3(1.45f, 0.08f, 0.08f), gold);
+        AddForceFieldBar(forceField, new Vector3(0, 3.8f, 0.72f), new Vector3(1.45f, 0.08f, 0.08f), gold);
+        AddChild(forceField);
+        HideForceFieldLater();
+    }
+
+    private static void AddForceFieldBar(Node3D parent, Vector3 position, Vector3 size, Color color)
+    {
+        parent.AddChild(new MeshInstance3D
         {
-            Name = "ForceField",
-            Mesh = new BoxMesh { Size = new Vector3(3.2f, 4.7f, 1.8f) },
-            Position = new Vector3(0, 2.1f, 0),
+            Name = "ForceFieldBar",
+            Mesh = new BoxMesh { Size = size },
+            Position = position,
             MaterialOverride = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.55f, 0.05f, 1f, 0.38f),
+                AlbedoColor = color,
                 EmissionEnabled = true,
-                Emission = new Color(0.55f, 0.05f, 1f),
+                Emission = color,
+                EmissionEnergyMultiplier = 1.4f,
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded
             }
+        });
+    }
+
+    private void AddAudio()
+    {
+        actionSound = new AudioStreamPlayer3D
+        {
+            Stream = GD.Load<AudioStream>("res://assets/audio/button.wav"),
+            VolumeDb = -5f,
+            UnitSize = 8f
         };
-        AddChild(forceField);
-        HideForceFieldLater();
+        AddChild(actionSound);
+        footstepSound = new AudioStreamPlayer3D
+        {
+            Stream = GD.Load<AudioStream>("res://assets/audio/bfsl-minifigfoots1.mp3"),
+            VolumeDb = -10f,
+            UnitSize = 9f
+        };
+        AddChild(footstepSound);
     }
 
     private void TintPart(string name, Color color)
@@ -382,17 +394,45 @@ public partial class R6Character : CharacterBody3D
     private void AnimateClassic(float delta)
     {
         animClock += delta;
-        var swing = Mathf.Sin(animClock * (animState == "walk" ? 8.5f : 2.5f));
-        var armAngle = animState == "walk" ? swing * 24f : 0f;
-        var legAngle = animState == "walk" ? -swing * 24f : 0f;
-        if (animState == "jump") { armAngle = -28f; legAngle = 12f; }
-        if (animState == "fall") { armAngle = 18f; legAngle = -8f; }
+        var rawSwing = Mathf.Sin(animClock * (animState == "walk" ? 7.2f : 2.5f));
+        var steppedSwing = Mathf.Abs(rawSwing) < 0.22f ? 0f : Mathf.Sign(rawSwing);
+        var armAngle = animState == "walk" ? steppedSwing * 20f : 0f;
+        var legAngle = animState == "walk" ? -steppedSwing * 18f : 0f;
+        if (animState == "jump") { armAngle = -30f; legAngle = 10f; }
+        if (animState == "fall") { armAngle = 14f; legAngle = -6f; }
         RotatePart("LeftArm", new Vector3(armAngle, 0, 0));
         RotatePart("RightArm", new Vector3(-armAngle, 0, 0));
         RotatePart("LeftLeg", new Vector3(legAngle, 0, 0));
         RotatePart("RightLeg", new Vector3(-legAngle, 0, 0));
         RotatePart("Head", Vector3.Zero);
         if (forceField != null && forceField.Visible) forceField.RotationDegrees += new Vector3(0, 90f * delta, 0);
+    }
+
+    private void UpdateBubbleLabels()
+    {
+        for (var i = 0; i < bubbles.Count; i++)
+        {
+            var hasMessage = i < bubbleMessages.Count;
+            bubbles[i].Visible = hasMessage;
+            bubbles[i].Text = hasMessage ? bubbleMessages[i] : "";
+        }
+    }
+
+    private void UpdateFootsteps(bool walking)
+    {
+        if (IsRemote || footstepSound?.Stream == null) return;
+        if (walking)
+        {
+            if (!footstepSound.Playing) footstepSound.Play();
+        }
+        else if (footstepSound.Playing) footstepSound.Stop();
+    }
+
+    private void PlayActionSound()
+    {
+        if (actionSound?.Stream == null) return;
+        actionSound.Stop();
+        actionSound.Play();
     }
 
     private void RotatePart(string name, Vector3 degrees)

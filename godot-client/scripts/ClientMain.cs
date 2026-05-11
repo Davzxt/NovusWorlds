@@ -29,11 +29,15 @@ public partial class ClientMain : Node3D
     private float cameraDistance = 12f;
     private bool rotatingCamera;
     private AudioStreamPlayer switchSound = null!;
+    private Node3D skyboxRoot = null!;
     private Control topBar = null!;
     private Control playerListPanel = null!;
     private Control healthPanel = null!;
     private Control inventoryPanel = null!;
     private Control chatPanel = null!;
+    private readonly List<Button> inventorySlots = new();
+    private int selectedInventorySlot = -1;
+    private double respawnCooldown;
 
     public override async void _Ready()
     {
@@ -101,12 +105,15 @@ public partial class ClientMain : Node3D
         }
         else if (ev is InputEventKey key && key.Pressed)
         {
+            if (chatInput?.HasFocus() == true && key.Keycode != Key.Escape) return;
             if (key.Keycode == Key.Slash)
             {
                 chatInput?.GrabFocus();
                 PlaySwitch();
             }
             if (key.Keycode == Key.Escape) chatInput?.ReleaseFocus();
+            if (key.Keycode >= Key.Key1 && key.Keycode <= Key.Key5)
+                SelectInventorySlot((int)(key.Keycode - Key.Key1));
         }
         else if (ev is InputEventScreenDrag drag)
         {
@@ -134,6 +141,9 @@ public partial class ClientMain : Node3D
             var offset = new Vector3(Mathf.Sin(yawRad) * horizontal, Mathf.Sin(pitchRad) * cameraDistance + 1.2f, Mathf.Cos(yawRad) * horizontal);
             camera.GlobalPosition = camera.GlobalPosition.Lerp(player.GlobalPosition + offset, 0.35f);
             camera.LookAt(player.GlobalPosition + Vector3.Up * 2f);
+            if (skyboxRoot != null) skyboxRoot.GlobalPosition = camera.GlobalPosition;
+            if (respawnCooldown > 0) respawnCooldown -= delta;
+            if (player.GlobalPosition.Y < Mathf.Min(-60f, map.Spawn.Y - 45f)) RespawnPlayer(true);
             netClock += delta;
             if (Multiplayer.MultiplayerPeer != null && Multiplayer.GetUniqueId() != 1 && netClock >= 0.05)
             {
@@ -154,7 +164,7 @@ public partial class ClientMain : Node3D
     {
         var cursor = GD.Load<Texture2D>("res://assets/ui/ArrowCursor.png");
         if (cursor != null) Input.SetCustomMouseCursor(cursor, Input.CursorShape.Arrow, Vector2.Zero);
-        switchSound = new AudioStreamPlayer { Stream = GD.Load<AudioStream>("res://assets/ui/SWITCH3.wav"), VolumeDb = -8f };
+        switchSound = new AudioStreamPlayer { Stream = GD.Load<AudioStream>("res://assets/audio/button.wav"), VolumeDb = -7f };
         AddChild(switchSound);
     }
 
@@ -278,6 +288,7 @@ public partial class ClientMain : Node3D
             FogDensity = 0.0015f
         };
         AddChild(env);
+        AddSkyboxCube(panorama);
         AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-50, -35, 0), LightEnergy = 1.65f, ShadowEnabled = true });
     }
 
@@ -302,7 +313,7 @@ public partial class ClientMain : Node3D
         topBar = Panel(Vector2.Zero, new Vector2(1280, 25), new Color(0.80f, 0.82f, 0.84f, 0.76f));
         root.AddChild(topBar);
         topBar.AddChild(new Label { Text = "Novus Worlds", Position = new Vector2(10, 4), Modulate = Colors.White });
-        AddTopButton("Reset", 250, () => { player.GlobalPosition = map.Spawn + Vector3.Up * 2f; PlaySwitch(); });
+        AddTopButton("Reset", 250, () => RespawnPlayer(false, true));
         AddTopButton("Help", 330, () => { AddChatLine("WASD move, right mouse rotates camera, mouse wheel zooms, / opens chat."); PlaySwitch(); });
         AddTopButton("Exit", 410, () => { PlaySwitch(); GetTree().Quit(); });
 
@@ -320,12 +331,7 @@ public partial class ClientMain : Node3D
 
         inventoryPanel = Panel(new Vector2(8, 625), new Vector2(300, 76), new Color(0.72f, 0.74f, 0.76f, 0.36f));
         root.AddChild(inventoryPanel);
-        for (var i = 0; i < 5; i++)
-        {
-            var slot = Panel(new Vector2(8 + i * 56, 18), new Vector2(48, 48), new Color(0.9f, 0.94f, 0.98f, 0.72f));
-            slot.AddChild(new Label { Text = (i + 1).ToString(), Position = new Vector2(3, 28), Modulate = Colors.White });
-            inventoryPanel.AddChild(slot);
-        }
+        BuildInventory();
 
         chatPanel = new Control { Position = new Vector2(8, 32), Size = new Vector2(360, 136) };
         root.AddChild(chatPanel);
@@ -425,6 +431,83 @@ public partial class ClientMain : Node3D
         if (healthPanel != null) healthPanel.Position = new Vector2(size.X - 125, size.Y * 0.36f);
         if (inventoryPanel != null) inventoryPanel.Position = new Vector2(8, size.Y - 96);
         if (chatInput != null) chatInput.Position = new Vector2(8, size.Y - 30);
+    }
+
+    private void BuildInventory()
+    {
+        if (inventoryPanel == null) return;
+        inventorySlots.Clear();
+        foreach (var child in inventoryPanel.GetChildren()) child.QueueFree();
+        var items = localAvatar.Items;
+        inventoryPanel.Visible = items.Count > 0;
+        if (!inventoryPanel.Visible) return;
+        var count = Mathf.Min(5, items.Count);
+        inventoryPanel.Size = new Vector2(10 + count * 56, 76);
+        for (var i = 0; i < count; i++)
+        {
+            var item = items[i];
+            var button = new Button
+            {
+                Text = (i + 1).ToString(),
+                Position = new Vector2(8 + i * 56, 18),
+                Size = new Vector2(48, 48),
+                TooltipText = item.Name,
+                FocusMode = Control.FocusModeEnum.None
+            };
+            var slot = i;
+            button.Pressed += () => SelectInventorySlot(slot);
+            inventoryPanel.AddChild(button);
+            inventorySlots.Add(button);
+        }
+        SelectInventorySlot(0, false);
+    }
+
+    private void SelectInventorySlot(int slot, bool playSound = true)
+    {
+        if (slot < 0 || slot >= inventorySlots.Count) return;
+        selectedInventorySlot = slot;
+        for (var i = 0; i < inventorySlots.Count; i++)
+            inventorySlots[i].Modulate = i == selectedInventorySlot ? new Color(1f, 0.95f, 0.55f) : Colors.White;
+        if (playSound) PlaySwitch();
+    }
+
+    private void RespawnPlayer(bool killed, bool force = false)
+    {
+        if (player == null) return;
+        if (!force && respawnCooldown > 0) return;
+        respawnCooldown = 0.85;
+        player.Respawn(map.Spawn + Vector3.Up * 2f);
+        if (killed) AddChatLine($"{localAvatar.Username} caiu no void.");
+        if (healthFill != null)
+        {
+            healthFill.Size = new Vector2(7, killed ? 0 : 138);
+            GetTree().CreateTimer(0.3).Timeout += () =>
+            {
+                if (IsInstanceValid(healthFill)) healthFill.Size = new Vector2(7, 138);
+            };
+        }
+        PlaySwitch();
+    }
+
+    private void AddSkyboxCube(Texture2D texture)
+    {
+        if (texture == null) return;
+        skyboxRoot = new Node3D { Name = "ClassicSkybox" };
+        var material = new StandardMaterial3D
+        {
+            AlbedoTexture = texture,
+            AlbedoColor = Colors.White,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps
+        };
+        skyboxRoot.AddChild(new MeshInstance3D
+        {
+            Name = "SkyboxCube",
+            Mesh = new BoxMesh { Size = new Vector3(900, 900, 900) },
+            MaterialOverride = material
+        });
+        AddChild(skyboxRoot);
     }
 
     private void PlaySwitch()

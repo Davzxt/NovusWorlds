@@ -2,7 +2,17 @@ using Godot;
 
 public static class MapBuilder
 {
-    private static readonly Texture2D StudTexture = GD.Load<Texture2D>("res://assets/environment/stud.webp");
+    private static readonly Texture2D[] SurfaceTextures =
+    {
+        GD.Load<Texture2D>("res://assets/environment/surface_0.png"),
+        GD.Load<Texture2D>("res://assets/environment/surface_1.png"),
+        GD.Load<Texture2D>("res://assets/environment/surface_2.png"),
+        GD.Load<Texture2D>("res://assets/environment/surface_3.png"),
+        GD.Load<Texture2D>("res://assets/environment/surface_4.png"),
+        GD.Load<Texture2D>("res://assets/environment/surface_5.png"),
+        GD.Load<Texture2D>("res://assets/environment/surface_6.png"),
+        GD.Load<Texture2D>("res://assets/environment/surface_7.png")
+    };
 
     public static Node3D Build(NovusMap map)
     {
@@ -27,12 +37,6 @@ public static class MapBuilder
                 Roughness = part.Material == "Metal" ? 0.25f : 0.8f,
                 Metallic = part.Material == "Metal" ? 0.8f : 0f
             };
-            if (StudTexture != null && part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase))
-            {
-                material.AlbedoColor = Colors.White;
-                material.AlbedoTexture = StudTexture;
-                material.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
-            }
             if (part.Transparency > 0) material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
             mesh.MaterialOverride = material;
             body.AddChild(mesh);
@@ -45,7 +49,7 @@ public static class MapBuilder
             }
             root.AddChild(body);
             if (part.Size.X >= 12 && part.Size.Z >= 12 && part.Transparency <= 0.05f)
-                AddStudTiles(body, part, displayColor);
+                AddSurfaceTiles(body, part, displayColor);
         }
         return root;
     }
@@ -60,20 +64,21 @@ public static class MapBuilder
         map.Objects.Add(new NovusPart { Id = "stairs-3", Name = "Classic Step 3", Position = new Vector3(24, 2.5f, 24), Size = new Vector3(6, 1, 6), Color = new Color(0.45f, 0.25f, 0.12f), Material = "Plastic" });
     }
 
-    private static void AddStudTiles(Node3D body, NovusPart part, Color displayColor)
+    private static void AddSurfaceTiles(Node3D body, NovusPart part, Color displayColor)
     {
-        if (StudTexture == null) return;
-        var tileSize = 8f;
+        var texture = SurfaceFor(part);
+        if (texture == null) return;
+        var tileSize = 10f;
         var sx = Mathf.Min(18, Mathf.Max(1, Mathf.CeilToInt(part.Size.X / tileSize)));
         var sz = Mathf.Min(18, Mathf.Max(1, Mathf.CeilToInt(part.Size.Z / tileSize)));
         var width = part.Size.X / sx;
         var depth = part.Size.Z / sz;
         var mat = new StandardMaterial3D
         {
-            AlbedoColor = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase) ? Colors.White : displayColor.Lightened(0.28f),
-            AlbedoTexture = StudTexture,
+            AlbedoColor = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase) ? new Color(0.34f, 0.72f, 0.38f) : displayColor.Lightened(0.08f),
+            AlbedoTexture = texture,
             Roughness = 0.88f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled
         };
         for (var x = 0; x < sx; x++)
@@ -88,5 +93,16 @@ public static class MapBuilder
             };
             body.AddChild(tile);
         }
+    }
+
+    private static Texture2D SurfaceFor(NovusPart part)
+    {
+        var material = (part.Material ?? "").ToLowerInvariant();
+        var name = (part.Name ?? "").ToLowerInvariant();
+        if (name.Contains("baseplate") || material.Contains("grass")) return SurfaceTextures[0];
+        if (material.Contains("metal")) return SurfaceTextures[2];
+        if (material.Contains("brick") || material.Contains("stone")) return SurfaceTextures[1];
+        if (material.Contains("wood")) return SurfaceTextures[4];
+        return SurfaceTextures[0];
     }
 }
