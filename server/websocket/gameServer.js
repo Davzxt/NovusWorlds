@@ -87,7 +87,7 @@ function attachGameServer(server) {
       if (data.type === 'join') {
         if (room.players.size >= 20) return ws.send(JSON.stringify({ type: 'error', message: 'Sala cheia' }));
         self = {
-          id: String(data.userId || cryptoRandom()),
+          id: String(data.userId || data.guestKey || cryptoRandom()),
           username: String(data.username || 'Guest').slice(0, 20),
           avatar: data.avatarData || {},
           ws,

@@ -241,14 +241,14 @@ public partial class R6Character : CharacterBody3D
     private static LocalR6Sources CollectLocalR6Sources(Node3D imported)
     {
         var sources = new LocalR6Sources();
-        var meshes = new List<(MeshInstance3D Mesh, Vector3 Position)>();
+        var meshes = new List<(MeshInstance3D Mesh, Vector3 Center)>();
         CollectMeshInstances(imported, Transform3D.Identity, meshes);
         foreach (var entry in meshes)
         {
             var mesh = entry.Mesh;
             if (mesh.Mesh == null) continue;
             var name = mesh.Name.ToString().ToLowerInvariant();
-            var pos = entry.Position;
+            var pos = entry.Center;
             if (name.Contains("head") || name.Contains("pyramid") || pos.Y > 1.8f)
             {
                 sources.Head = mesh.Mesh;
@@ -274,14 +274,34 @@ public partial class R6Character : CharacterBody3D
                 sources.RightLeg = mesh.Mesh;
             }
         }
+        if (!sources.HasCompleteRig && meshes.Count >= 6)
+        {
+            meshes.Sort((a, b) => a.Center.Y.CompareTo(b.Center.Y));
+            var legs = new List<(MeshInstance3D Mesh, Vector3 Center)> { meshes[0], meshes[1] };
+            legs.Sort((a, b) => a.Center.X.CompareTo(b.Center.X));
+            sources.LeftLeg = legs[0].Mesh.Mesh;
+            sources.RightLeg = legs[1].Mesh.Mesh;
+
+            var middle = new List<(MeshInstance3D Mesh, Vector3 Center)> { meshes[2], meshes[3], meshes[4] };
+            middle.Sort((a, b) => a.Center.X.CompareTo(b.Center.X));
+            sources.LeftArm = middle[0].Mesh.Mesh;
+            sources.Torso = middle[1].Mesh.Mesh;
+            sources.RightArm = middle[2].Mesh.Mesh;
+            sources.Head = meshes[^1].Mesh.Mesh;
+        }
         return sources;
     }
 
-    private static void CollectMeshInstances(Node node, Transform3D parentTransform, List<(MeshInstance3D Mesh, Vector3 Position)> meshes)
+    private static void CollectMeshInstances(Node node, Transform3D parentTransform, List<(MeshInstance3D Mesh, Vector3 Center)> meshes)
     {
         var transform = parentTransform;
         if (node is Node3D node3D) transform = parentTransform * node3D.Transform;
-        if (node is MeshInstance3D mesh) meshes.Add((mesh, transform.Origin));
+        if (node is MeshInstance3D mesh && mesh.Mesh != null)
+        {
+            var aabb = mesh.Mesh.GetAabb();
+            var localCenter = aabb.Position + aabb.Size * 0.5f;
+            meshes.Add((mesh, transform * localCenter));
+        }
         foreach (var child in node.GetChildren())
             CollectMeshInstances(child, transform, meshes);
     }

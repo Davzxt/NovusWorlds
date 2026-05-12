@@ -86,10 +86,11 @@ public static class NovusApi
         return map;
     }
 
-    private static NovusAvatar ParseAvatar(JsonElement root)
+    public static NovusAvatar ParseAvatar(JsonElement root)
     {
         var avatar = new NovusAvatar
         {
+            UserId = root.TryGetProperty("userId", out var userId) && userId.TryGetInt32(out var parsedUserId) ? parsedUserId : 0,
             Username = GetString(root, "username", "NovusPlayer"),
             Face = GetString(root, "face", "happy")
         };

@@ -26,6 +26,7 @@ public sealed class NovusPart
 
 public sealed class NovusAvatar
 {
+    public int UserId;
     public string Username = "NovusPlayer";
     public string Face = "happy";
     public string FaceTextureUrl = "";

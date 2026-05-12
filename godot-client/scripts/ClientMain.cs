@@ -9,7 +9,7 @@ public partial class ClientMain : Node3D
     private NovusMap map = new();
     private R6Character player = null!;
     private Camera3D camera = null!;
-    private readonly Dictionary<long, Node3D> remotePlayers = new();
+    private readonly Dictionary<string, Node3D> remotePlayers = new();
     private float yaw = 35f;
     private float pitch = -18f;
     private double netClock;
@@ -23,14 +23,18 @@ public partial class ClientMain : Node3D
     private ColorRect healthFill = null!;
     private RichTextLabel chatLog = null!;
     private LineEdit chatInput = null!;
-    private readonly HashSet<long> knownPlayers = new();
-    private readonly Dictionary<long, string> playerNames = new();
+    private readonly HashSet<string> knownPlayers = new();
+    private readonly Dictionary<string, string> playerNames = new();
     private double uiClock;
     private float cameraDistance = 12f;
     private bool rotatingCamera;
     private bool firstPerson;
     private bool shiftLock;
     private bool multiplayerConnected;
+    private WebSocketPeer? wsPeer;
+    private bool wsJoinSent;
+    private string localNetworkId = "";
+    private LaunchData launchData = new();
     private AudioStreamPlayer clickSound = null!;
     private Texture2D? arrowCursor;
     private Texture2D? dragCursor;
@@ -57,6 +61,7 @@ public partial class ClientMain : Node3D
         ShowLoading("Bricks: 0    Connectors: 0", 0.08f);
         var args = OS.GetCmdlineArgs();
         var launch = ReadLaunchData(args);
+        launchData = launch;
         SetLoading("Bricks: 0    Connectors: 0", 0.22f);
         try { map = await NovusApi.LoadPlace(launch.BaseUrl, launch.GameId, launch.Ticket); }
         catch (Exception ex) { GD.PushWarning($"Using local baseplate: {ex.Message}"); NovusApi.EnsurePlayable(map); }
@@ -71,7 +76,7 @@ public partial class ClientMain : Node3D
         SetLoading($"Bricks: {map.Objects.Count}    Connectors: 0", 0.92f);
         SetupDesktopHud();
         if (IsMobileDevice()) SetupMobileHud();
-        ConnectMultiplayer(launch.ServerHost, launch.ServerPort);
+        ConnectMultiplayer(launch);
         await ToSignal(GetTree().CreateTimer(0.28), SceneTreeTimer.SignalName.Timeout);
         HideLoading();
     }
@@ -206,7 +211,13 @@ public partial class ClientMain : Node3D
             if (voidGrace > 0) voidGrace -= delta;
             if (voidGrace <= 0 && player.GlobalPosition.Y < voidKillY) RespawnPlayer(true);
             netClock += delta;
-            if (multiplayerConnected && Multiplayer.GetUniqueId() != 1 && netClock >= 0.05)
+            PollWebSocket();
+            if (multiplayerConnected && wsPeer != null && netClock >= 0.05)
+            {
+                netClock = 0;
+                SendWsMove();
+            }
+            else if (multiplayerConnected && Multiplayer.GetUniqueId() != 1 && netClock >= 0.05)
             {
                 netClock = 0;
                 RpcId(1, nameof(SubmitState), player.GlobalPosition, player.RotationDegrees, player.CurrentAnimation);
@@ -309,7 +320,40 @@ public partial class ClientMain : Node3D
         return Mathf.Min(killY, -55f);
     }
 
-    private void ConnectMultiplayer(string host, int port)
+    private void ConnectMultiplayer(LaunchData launch)
+    {
+        if (ConnectWebSocketMultiplayer(launch)) return;
+        ConnectEnetMultiplayer(launch.ServerHost, launch.ServerPort);
+    }
+
+    private bool ConnectWebSocketMultiplayer(LaunchData launch)
+    {
+        try
+        {
+            var baseUri = new Uri(launch.BaseUrl);
+            var scheme = baseUri.Scheme == "https" ? "wss" : "ws";
+            var path = $"/ws/game/{Uri.EscapeDataString(launch.GameId)}";
+            var uri = $"{scheme}://{baseUri.Host}{(baseUri.IsDefaultPort ? "" : ":" + baseUri.Port)}{path}";
+            wsPeer = new WebSocketPeer();
+            var err = wsPeer.ConnectToUrl(uri);
+            if (err != Error.Ok)
+            {
+                wsPeer = null;
+                return false;
+            }
+            localNetworkId = localAvatar.UserId > 0 ? localAvatar.UserId.ToString() : GuestKey();
+            GD.Print("Connecting to Novus WebSocket server: " + uri);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"WebSocket multiplayer unavailable: {ex.Message}");
+            wsPeer = null;
+            return false;
+        }
+    }
+
+    private void ConnectEnetMultiplayer(string host, int port)
     {
         var peer = new ENetMultiplayerPeer();
         var err = peer.CreateClient(host, port);
@@ -322,11 +366,144 @@ public partial class ClientMain : Node3D
         Multiplayer.ConnectedToServer += () =>
         {
             multiplayerConnected = true;
+            localNetworkId = Multiplayer.GetUniqueId().ToString();
             GD.Print("Connected to Novus Godot server");
             RpcId(1, nameof(RegisterPlayer), localAvatar.Username);
         };
         Multiplayer.ConnectionFailed += () => { multiplayerConnected = false; GD.PushWarning("Could not connect to Novus Godot server"); };
         Multiplayer.ServerDisconnected += () => { multiplayerConnected = false; GD.PushWarning("Disconnected from Novus Godot server"); };
+    }
+
+    private void PollWebSocket()
+    {
+        if (wsPeer == null) return;
+        wsPeer.Poll();
+        var state = wsPeer.GetReadyState();
+        if (state == WebSocketPeer.State.Open)
+        {
+            if (!wsJoinSent)
+            {
+                wsJoinSent = true;
+                multiplayerConnected = true;
+                SendWsJoin();
+            }
+            while (wsPeer.GetAvailablePacketCount() > 0)
+                HandleWsMessage(wsPeer.GetPacket().GetStringFromUtf8());
+        }
+        else if (state == WebSocketPeer.State.Closed)
+        {
+            if (multiplayerConnected) AddChatLine("Multiplayer desconectado.");
+            multiplayerConnected = false;
+            wsPeer = null;
+        }
+    }
+
+    private void SendWsJoin()
+    {
+        if (wsPeer == null || player == null) return;
+        var payload = new Dictionary<string, object>
+        {
+            ["type"] = "join",
+            ["gameId"] = launchData.GameId,
+            ["userId"] = localAvatar.UserId,
+            ["guestKey"] = localNetworkId,
+            ["username"] = localAvatar.Username,
+            ["avatarData"] = AvatarToWire(localAvatar),
+            ["position"] = Vec(player.GlobalPosition)
+        };
+        wsPeer.SendText(JsonSerializer.Serialize(payload));
+        playerNames[localNetworkId] = localAvatar.Username;
+        AddChatLine("Multiplayer conectado ao servidor do site.");
+    }
+
+    private void SendWsMove()
+    {
+        if (wsPeer == null || player == null || wsPeer.GetReadyState() != WebSocketPeer.State.Open) return;
+        wsPeer.SendText(JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["type"] = "move",
+            ["position"] = Vec(player.GlobalPosition),
+            ["rotation"] = Vec(player.RotationDegrees),
+            ["animation"] = player.CurrentAnimation
+        }));
+    }
+
+    private void SendWsChat(string msg)
+    {
+        if (wsPeer == null || wsPeer.GetReadyState() != WebSocketPeer.State.Open) return;
+        wsPeer.SendText(JsonSerializer.Serialize(new Dictionary<string, object> { ["type"] = "chat", ["message"] = msg }));
+    }
+
+    private void HandleWsMessage(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var type = GetJsonString(root, "type", "");
+            if (type == "world_state" && root.TryGetProperty("players", out var players) && players.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var p in players.EnumerateArray()) ApplyWsPlayer(p);
+                UpdatePlayerList();
+            }
+            else if (type == "player_join" && root.TryGetProperty("player", out var joined))
+            {
+                ApplyWsPlayer(joined);
+                var name = GetJsonString(joined, "username", "Player");
+                if (GetJsonString(joined, "id", "") != localNetworkId) AddChatLine($"{name} entrou no jogo.");
+            }
+            else if (type == "player_leave")
+            {
+                RemoveRemotePlayer(GetJsonString(root, "playerId", ""));
+            }
+            else if (type == "chat_broadcast")
+            {
+                var id = GetJsonString(root, "playerId", "");
+                var message = Moderate(GetJsonString(root, "message", ""));
+                var from = GetJsonString(root, "from", PlayerName(id));
+                if (id == localNetworkId) return;
+                playerNames[id] = from;
+                AddChatLine($"{from}: {message}");
+                if (remotePlayers.TryGetValue(id, out var remote) && remote is R6Character r6) r6.ShowChatBubble(message);
+            }
+            else if (type == "error")
+            {
+                AddChatLine("Multiplayer: " + GetJsonString(root, "message", "erro"));
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"Bad websocket message: {ex.Message}");
+        }
+    }
+
+    private void ApplyWsPlayer(JsonElement p)
+    {
+        var id = GetJsonString(p, "id", "");
+        if (string.IsNullOrWhiteSpace(id) || id == localNetworkId) return;
+        var username = GetJsonString(p, "username", $"Player{id}");
+        var position = p.TryGetProperty("position", out var pos) ? ReadVector(pos, Vector3.Zero) : Vector3.Zero;
+        var rotation = p.TryGetProperty("rotation", out var rot) ? ReadVector(rot, Vector3.Zero) : Vector3.Zero;
+        var animation = GetJsonString(p, "animation", "idle");
+        var created = false;
+        if (!remotePlayers.TryGetValue(id, out var remote))
+        {
+            remote = CreateRemotePlayer(id);
+            remotePlayers[id] = remote;
+            AddChild(remote);
+            created = true;
+        }
+        remote.GlobalPosition = remote.GlobalPosition.Lerp(position, 0.35f);
+        remote.RotationDegrees = rotation;
+        if (remote is R6Character r6)
+        {
+            if (created && p.TryGetProperty("avatar", out var avatarData) && avatarData.ValueKind == JsonValueKind.Object)
+                r6.SetAvatar(NovusApi.ParseAvatar(avatarData));
+            r6.SetDisplayName(username);
+            r6.SetRemoteAnimation(animation);
+        }
+        knownPlayers.Add(id);
+        playerNames[id] = username;
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
@@ -338,27 +515,29 @@ public partial class ClientMain : Node3D
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
     public void ReceiveState(long id, Vector3 position, Vector3 rotation, string animation)
     {
-        if (id == Multiplayer.GetUniqueId()) return;
-        if (!remotePlayers.TryGetValue(id, out var remote))
+        var key = id.ToString();
+        if (key == localNetworkId) return;
+        if (!remotePlayers.TryGetValue(key, out var remote))
         {
-            remote = CreateRemotePlayer(id);
-            remotePlayers[id] = remote;
+            remote = CreateRemotePlayer(key);
+            remotePlayers[key] = remote;
             AddChild(remote);
         }
         remote.GlobalPosition = remote.GlobalPosition.Lerp(position, 0.35f);
         remote.RotationDegrees = rotation;
         if (remote is R6Character r6) r6.SetRemoteAnimation(animation);
-        knownPlayers.Add(id);
-        if (!playerNames.ContainsKey(id)) playerNames[id] = $"Player{id}";
+        knownPlayers.Add(key);
+        if (!playerNames.ContainsKey(key)) playerNames[key] = $"Player{id}";
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void ReceiveChat(long id, string message)
     {
-        if (id == Multiplayer.GetUniqueId()) return;
+        var key = id.ToString();
+        if (key == localNetworkId) return;
         var clean = Moderate(message);
-        AddChatLine($"{PlayerName(id)}: {clean}");
-        if (remotePlayers.TryGetValue(id, out var remote) && remote is R6Character r6) r6.ShowChatBubble(clean);
+        AddChatLine($"{PlayerName(key)}: {clean}");
+        if (remotePlayers.TryGetValue(key, out var remote) && remote is R6Character r6) r6.ShowChatBubble(clean);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -371,14 +550,20 @@ public partial class ClientMain : Node3D
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void PlayerJoined(long id, string username)
     {
-        knownPlayers.Add(id);
-        playerNames[id] = username;
+        var key = id.ToString();
+        knownPlayers.Add(key);
+        playerNames[key] = username;
         AddChatLine($"{username} entrou no jogo.");
         UpdatePlayerList();
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void PlayerLeft(long id)
+    {
+        RemoveRemotePlayer(id.ToString());
+    }
+
+    private void RemoveRemotePlayer(string id)
     {
         if (!remotePlayers.TryGetValue(id, out var remote)) return;
         remote.QueueFree();
@@ -388,7 +573,7 @@ public partial class ClientMain : Node3D
         UpdatePlayerList();
     }
 
-    private static Node3D CreateRemotePlayer(long id)
+    private static Node3D CreateRemotePlayer(string id)
     {
         return new R6Character { Name = $"Player_{id}", IsRemote = true };
     }
@@ -557,6 +742,7 @@ public partial class ClientMain : Node3D
         if (msg.Length == 0) return;
         AddChatLine($"{localAvatar.Username}: {msg}");
         player.ShowChatBubble(msg);
+        if (wsPeer != null) SendWsChat(msg);
         if (Multiplayer.MultiplayerPeer != null && Multiplayer.GetUniqueId() != 1) RpcId(1, nameof(SendChat), msg);
         PlayClick();
     }
@@ -574,7 +760,7 @@ public partial class ClientMain : Node3D
         if (playerList == null) return;
         var text = "Player List\n" + localAvatar.Username + "\n";
         foreach (var id in knownPlayers)
-            if (id != Multiplayer.GetUniqueId()) text += PlayerName(id) + "\n";
+            if (id != localNetworkId) text += PlayerName(id) + "\n";
         playerList.Text = text;
     }
 
@@ -675,7 +861,69 @@ public partial class ClientMain : Node3D
         clickSound.Play();
     }
 
-    private string PlayerName(long id) => playerNames.TryGetValue(id, out var name) ? name : $"Player{id}";
+    private string PlayerName(string id) => playerNames.TryGetValue(id, out var name) ? name : $"Player{id}";
+
+    private static Dictionary<string, object> Vec(Vector3 value)
+    {
+        return new Dictionary<string, object> { ["x"] = value.X, ["y"] = value.Y, ["z"] = value.Z };
+    }
+
+    private static Vector3 ReadVector(JsonElement value, Vector3 fallback)
+    {
+        return new Vector3(GetJsonFloat(value, "x", fallback.X), GetJsonFloat(value, "y", fallback.Y), GetJsonFloat(value, "z", fallback.Z));
+    }
+
+    private static Dictionary<string, object> AvatarToWire(NovusAvatar avatar)
+    {
+        var items = new List<Dictionary<string, object>>();
+        foreach (var item in avatar.Items)
+        {
+            items.Add(new Dictionary<string, object>
+            {
+                ["id"] = item.Id,
+                ["name"] = item.Name,
+                ["type"] = item.Type,
+                ["modelUrl"] = item.ModelUrl,
+                ["textureUrl"] = item.TextureUrl,
+                ["assetUrl"] = item.AssetUrl,
+                ["thumbnailUrl"] = item.ThumbnailUrl,
+                ["hatTransform"] = new Dictionary<string, object>
+                {
+                    ["position"] = Vec(item.HatPosition),
+                    ["rotation"] = Vec(item.HatRotation),
+                    ["scale"] = Vec(item.HatScale)
+                }
+            });
+        }
+        return new Dictionary<string, object>
+        {
+            ["userId"] = avatar.UserId,
+            ["username"] = avatar.Username,
+            ["face"] = avatar.Face,
+            ["colors"] = new Dictionary<string, object>
+            {
+                ["head"] = ColorToHex(avatar.HeadColor),
+                ["torso"] = ColorToHex(avatar.TorsoColor),
+                ["arms"] = ColorToHex(avatar.ArmsColor),
+                ["legs"] = ColorToHex(avatar.LegsColor)
+            },
+            ["items"] = items
+        };
+    }
+
+    private static string ColorToHex(Color color)
+    {
+        return $"#{(int)(color.R * 255):X2}{(int)(color.G * 255):X2}{(int)(color.B * 255):X2}";
+    }
+
+    private static string GuestKey()
+    {
+        var path = Path.Combine(OS.GetUserDataDir(), "guest-key.txt");
+        if (File.Exists(path)) return File.ReadAllText(path).Trim();
+        var key = "guest_" + Guid.NewGuid().ToString("N");
+        File.WriteAllText(path, key);
+        return key;
+    }
 
     private static string Moderate(string message)
     {
@@ -768,6 +1016,13 @@ public partial class ClientMain : Node3D
         if (!root.TryGetProperty(key, out var value)) return fallback;
         if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)) return number;
         return int.TryParse(GetJsonString(root, key, ""), out var parsed) ? parsed : fallback;
+    }
+
+    private static float GetJsonFloat(JsonElement root, string key, float fallback)
+    {
+        if (!root.TryGetProperty(key, out var value)) return fallback;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetSingle(out var number)) return number;
+        return float.TryParse(GetJsonString(root, key, ""), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : fallback;
     }
 
     private sealed class LaunchData
