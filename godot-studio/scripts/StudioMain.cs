@@ -13,6 +13,11 @@ public partial class StudioMain : Node3D
     private Camera3D camera = null!;
     private CanvasLayer ui = null!;
     private Control rootUi = null!;
+    private Panel toolbarPanel = null!;
+    private Panel toolboxPanel = null!;
+    private Panel propertiesPanel = null!;
+    private Panel scriptPanel = null!;
+    private Panel outputPanel = null!;
     private Tree explorer = null!;
     private VBoxContainer properties = null!;
     private TextEdit scriptEditor = null!;
@@ -107,6 +112,7 @@ public partial class StudioMain : Node3D
         if (Input.IsKeyPressed(Key.E)) move.Y += 1;
         if (Input.IsKeyPressed(Key.Q)) move.Y -= 1;
         if (move != Vector3.Zero) camera.Position += camera.Basis * move.Normalized() * speed * (float)delta;
+        if (rootUi != null) LayoutUi();
     }
 
     private void SetupScene()
@@ -133,10 +139,10 @@ public partial class StudioMain : Node3D
         rootUi.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         ui.AddChild(rootUi);
 
-        var toolbar = Panel(new Vector2(0, 0), new Vector2(1366, 34), new Color(0.76f, 0.76f, 0.76f, 0.95f));
-        rootUi.AddChild(toolbar);
+        toolbarPanel = Panel(new Vector2(0, 0), new Vector2(1366, 34), new Color(0.76f, 0.76f, 0.76f, 0.95f));
+        rootUi.AddChild(toolbarPanel);
         var top = new HBoxContainer { Position = new Vector2(6, 4), Size = new Vector2(1220, 28) };
-        toolbar.AddChild(top);
+        toolbarPanel.AddChild(top);
         AddButton(top, "Select", () => SetMode(ToolMode.Select));
         AddButton(top, "Move", () => SetMode(ToolMode.Move));
         AddButton(top, "Rotate", () => SetMode(ToolMode.Rotate));
@@ -145,15 +151,16 @@ public partial class StudioMain : Node3D
         AddButton(top, "Spawn", AddSpawn);
         AddButton(top, "Script", AddScript);
         AddButton(top, "Run", RunLuauPreview);
+        AddButton(top, "Test", TestGame);
         AddButton(top, "Save", () => SaveProject(false));
         AddButton(top, "Publish", () => SaveProject(true));
         AddButton(top, "Open .nwm", () => openDialog.PopupCentered(new Vector2I(720, 520)));
         AddButton(top, "Export .nwm", ExportProjectFile);
 
-        var toolbox = Panel(new Vector2(8, 44), new Vector2(210, 515), new Color(0.88f, 0.9f, 0.92f, 0.96f));
-        rootUi.AddChild(toolbox);
+        toolboxPanel = Panel(new Vector2(8, 44), new Vector2(210, 515), new Color(0.88f, 0.9f, 0.92f, 0.96f));
+        rootUi.AddChild(toolboxPanel);
         var tools = new VBoxContainer { Position = new Vector2(8, 8), Size = new Vector2(194, 500) };
-        toolbox.AddChild(tools);
+        toolboxPanel.AddChild(tools);
         tools.AddChild(Header("Toolbox"));
         AddButton(tools, "Block", () => AddPart("Part"));
         AddButton(tools, "Sphere", () => AddPart("Sphere"));
@@ -170,12 +177,12 @@ public partial class StudioMain : Node3D
         explorer.ItemSelected += OnExplorerSelected;
         rootUi.AddChild(explorer);
 
-        var propPanel = Panel(new Vector2(1046, 330), new Vector2(312, 320), new Color(0.9f, 0.92f, 0.95f, 0.98f));
-        rootUi.AddChild(propPanel);
+        propertiesPanel = Panel(new Vector2(1046, 330), new Vector2(312, 320), new Color(0.9f, 0.92f, 0.95f, 0.98f));
+        rootUi.AddChild(propertiesPanel);
         properties = new VBoxContainer { Position = new Vector2(8, 8), Size = new Vector2(296, 304) };
-        propPanel.AddChild(properties);
+        propertiesPanel.AddChild(properties);
 
-        var scriptPanel = Panel(new Vector2(226, 560), new Vector2(812, 198), new Color(0.08f, 0.1f, 0.13f, 0.96f));
+        scriptPanel = Panel(new Vector2(226, 500), new Vector2(812, 180), new Color(0.08f, 0.1f, 0.13f, 0.96f));
         rootUi.AddChild(scriptPanel);
         scriptEditor = new TextEdit
         {
@@ -192,10 +199,12 @@ public partial class StudioMain : Node3D
             if (selectedScript >= 0 && selectedScript < map.Scripts.Count) map.Scripts[selectedScript].Source = scriptEditor.Text;
         };
 
-        output = new RichTextLabel { Position = new Vector2(8, 654), Size = new Vector2(1350, 82), BbcodeEnabled = false, ScrollActive = true, Modulate = new Color(0.7f, 1f, 0.7f) };
-        rootUi.AddChild(output);
-        status = new Label { Text = "Novus Studio ready", Position = new Vector2(8, 738), Modulate = Colors.White };
-        rootUi.AddChild(status);
+        outputPanel = Panel(new Vector2(226, 684), new Vector2(812, 76), new Color(0.03f, 0.04f, 0.05f, 0.94f));
+        rootUi.AddChild(outputPanel);
+        output = new RichTextLabel { Position = new Vector2(8, 6), Size = new Vector2(796, 46), BbcodeEnabled = false, ScrollActive = true, Modulate = new Color(0.75f, 1f, 0.75f) };
+        outputPanel.AddChild(output);
+        status = new Label { Text = "Novus Studio ready", Position = new Vector2(8, 52), Modulate = Colors.White };
+        outputPanel.AddChild(status);
 
         openDialog = new FileDialog { Access = FileDialog.AccessEnum.Filesystem, FileMode = FileDialog.FileModeEnum.OpenFile, Filters = new string[] { "*.nwm ; Novus World Model", "*.json ; JSON" } };
         openDialog.FileSelected += path => { LoadProjectJson(File.ReadAllText(path)); RebuildWorkspace(); RebuildExplorer(); Log("Projeto aberto: " + path); };
@@ -203,6 +212,34 @@ public partial class StudioMain : Node3D
 
         importDialog = new FileDialog { Access = FileDialog.AccessEnum.Filesystem, FileMode = FileDialog.FileModeEnum.OpenFile, Filters = new string[] { "*.nwm ; Novus World Model", "*.json ; JSON" } };
         rootUi.AddChild(importDialog);
+        LayoutUi();
+    }
+
+    private void LayoutUi()
+    {
+        var size = GetViewport().GetVisibleRect().Size;
+        rootUi.Size = size;
+        toolbarPanel.Position = Vector2.Zero;
+        toolbarPanel.Size = new Vector2(size.X, 36);
+        toolboxPanel.Position = new Vector2(8, 46);
+        toolboxPanel.Size = new Vector2(222, Mathf.Max(360, size.Y - 128));
+        explorer.Position = new Vector2(Mathf.Max(760, size.X - 334), 46);
+        explorer.Size = new Vector2(326, 260);
+        propertiesPanel.Position = new Vector2(Mathf.Max(760, size.X - 334), 314);
+        propertiesPanel.Size = new Vector2(326, Mathf.Max(260, size.Y - 398));
+        properties.Size = new Vector2(propertiesPanel.Size.X - 16, propertiesPanel.Size.Y - 16);
+
+        var centerX = toolboxPanel.Position.X + toolboxPanel.Size.X + 8;
+        var rightX = propertiesPanel.Position.X - 8;
+        var centerW = Mathf.Max(520, rightX - centerX);
+        scriptPanel.Position = new Vector2(centerX, Mathf.Max(400, size.Y - 250));
+        scriptPanel.Size = new Vector2(centerW, 164);
+        scriptEditor.Position = new Vector2(8, 28);
+        scriptEditor.Size = new Vector2(centerW - 16, 128);
+        outputPanel.Position = new Vector2(centerX, size.Y - 78);
+        outputPanel.Size = new Vector2(centerW, 70);
+        output.Size = new Vector2(centerW - 16, 42);
+        status.Position = new Vector2(8, 48);
     }
 
     private void RebuildWorkspace()
@@ -247,6 +284,7 @@ public partial class StudioMain : Node3D
         {
             var part = map.Objects[selectedPart];
             properties.AddChild(Header("Properties"));
+            AddTransformButtons(properties);
             AddLineEdit(properties, "Name", part.Name, value => { part.Name = value; RebuildWorkspace(); RebuildExplorer(); });
             AddOption(properties, "Type", new[] { "Part", "Sphere", "Cylinder", "Wedge" }, part.Type, value => { part.Type = value; RebuildWorkspace(); RebuildExplorer(); });
             AddVector(properties, "Position", part.Position, value => { part.Position = value; RebuildWorkspace(); UpdateSelectionBox(); });
@@ -507,6 +545,19 @@ public partial class StudioMain : Node3D
         }
     }
 
+    private void TestGame()
+    {
+        if (map.GameId <= 0)
+        {
+            SaveProject(false);
+            Log("Teste preparado: salve o rascunho e clique Test de novo para abrir pelo site.");
+            return;
+        }
+        var url = $"{baseUrl.TrimEnd('/')}/game.html?id={map.GameId}";
+        Log("Abrindo teste: " + url);
+        OS.ShellOpen(url);
+    }
+
     private void ExportProjectFile()
     {
         var folder = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments), "NovusWorldsProjects");
@@ -614,6 +665,23 @@ public partial class StudioMain : Node3D
         RefreshProperties();
     }
 
+    private void NudgeSelectionAxis(Vector3 delta)
+    {
+        if (selectedPart < 0 || selectedPart >= map.Objects.Count) return;
+        var part = map.Objects[selectedPart];
+        if (mode == ToolMode.Rotate) part.Rotation += delta * 15f;
+        else if (mode == ToolMode.Scale)
+            part.Size = new Vector3(
+                Mathf.Max(0.1f, part.Size.X + delta.X),
+                Mathf.Max(0.1f, part.Size.Y + delta.Y),
+                Mathf.Max(0.1f, part.Size.Z + delta.Z)
+            );
+        else part.Position += delta;
+        RebuildWorkspace();
+        RefreshProperties();
+        UpdateSelectionBox();
+    }
+
     private void FocusSelected()
     {
         if (selectedPart < 0 || selectedPart >= map.Objects.Count) return;
@@ -626,6 +694,7 @@ public partial class StudioMain : Node3D
     {
         mode = next;
         status.Text = "Tool: " + mode;
+        RefreshProperties();
     }
 
     private static NovusScript DefaultScript() => new()
@@ -674,6 +743,23 @@ public partial class StudioMain : Node3D
         xs.ValueChanged += Apply; ys.ValueChanged += Apply; zs.ValueChanged += Apply;
         row.AddChild(xs); row.AddChild(ys); row.AddChild(zs);
         parent.AddChild(row);
+    }
+
+    private void AddTransformButtons(Container parent)
+    {
+        parent.AddChild(new Label { Text = mode == ToolMode.Rotate ? "Rotate step" : mode == ToolMode.Scale ? "Scale step" : "Move step" });
+        var row1 = new HBoxContainer();
+        AddButton(row1, "X-", () => NudgeSelectionAxis(new Vector3(-1, 0, 0)));
+        AddButton(row1, "X+", () => NudgeSelectionAxis(new Vector3(1, 0, 0)));
+        AddButton(row1, "Y-", () => NudgeSelectionAxis(new Vector3(0, -1, 0)));
+        AddButton(row1, "Y+", () => NudgeSelectionAxis(new Vector3(0, 1, 0)));
+        parent.AddChild(row1);
+        var row2 = new HBoxContainer();
+        AddButton(row2, "Z-", () => NudgeSelectionAxis(new Vector3(0, 0, -1)));
+        AddButton(row2, "Z+", () => NudgeSelectionAxis(new Vector3(0, 0, 1)));
+        AddButton(row2, "Focus", FocusSelected);
+        AddButton(row2, "Delete", DeleteSelected);
+        parent.AddChild(row2);
     }
 
     private void AddFloat(Container parent, string label, float value, double min, double max, Action<float> changed)
@@ -740,7 +826,11 @@ public partial class StudioMain : Node3D
         return part.Type;
     }
 
-    private static bool IsPointerOverUi(Vector2 pos) => pos.X < 220 || pos.X > 1040 || pos.Y < 36 || pos.Y > 555;
+    private bool IsPointerOverUi(Vector2 pos)
+    {
+        bool Hit(Control control) => control != null && new Rect2(control.GlobalPosition, control.Size).HasPoint(pos);
+        return Hit(toolbarPanel) || Hit(toolboxPanel) || Hit(explorer) || Hit(propertiesPanel) || Hit(scriptPanel) || Hit(outputPanel);
+    }
 
     private static string ReadArg(string[] args, string name, string fallback)
     {

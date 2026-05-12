@@ -16,18 +16,7 @@ public static class MapBuilder
 
             var mesh = new MeshInstance3D();
             mesh.Mesh = MeshFor(part);
-            var material = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(part.Color.R, part.Color.G, part.Color.B, 1f - part.Transparency),
-                Roughness = part.Material == "Metal" ? 0.25f : 0.8f,
-                Metallic = part.Material == "Metal" ? 0.8f : 0f,
-                EmissionEnabled = part.Name.Contains("Spawn", System.StringComparison.OrdinalIgnoreCase),
-                Emission = part.Name.Contains("Spawn", System.StringComparison.OrdinalIgnoreCase) ? part.Color : Colors.Black,
-                EmissionEnergyMultiplier = 0.35f
-            };
-            if (part.Reflectance > 0) material.Roughness = Mathf.Clamp(1f - part.Reflectance, 0.05f, 1f);
-            if (part.Transparency > 0) material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-            mesh.MaterialOverride = material;
+            mesh.MaterialOverride = ClassicPlastic.Material(part.Color, null, 1f - part.Transparency);
             body.AddChild(mesh);
 
             if (part.CanCollide)

@@ -31,14 +31,7 @@ public static class MapBuilder
             var displayColor = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase)
                 ? new Color(0.25f, 0.45f, 0.25f)
                 : part.Color;
-            var material = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(displayColor.R, displayColor.G, displayColor.B, 1f - part.Transparency),
-                Roughness = part.Material == "Metal" ? 0.25f : 0.8f,
-                Metallic = part.Material == "Metal" ? 0.8f : 0f
-            };
-            if (part.Transparency > 0) material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-            mesh.MaterialOverride = material;
+            mesh.MaterialOverride = ClassicPlastic.Material(displayColor, null, 1f - part.Transparency);
             body.AddChild(mesh);
 
             if (part.CanCollide)
@@ -73,14 +66,10 @@ public static class MapBuilder
         var sz = Mathf.Min(18, Mathf.Max(1, Mathf.CeilToInt(part.Size.Z / tileSize)));
         var width = part.Size.X / sx;
         var depth = part.Size.Z / sz;
-        var mat = new StandardMaterial3D
-        {
-            AlbedoColor = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase) ? new Color(0.34f, 0.72f, 0.38f) : displayColor.Lightened(0.08f),
-            AlbedoTexture = texture,
-            Roughness = 0.88f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled
-        };
+        var mat = ClassicPlastic.Material(
+            part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase) ? new Color(0.34f, 0.72f, 0.38f) : displayColor.Lightened(0.08f),
+            texture
+        );
         for (var x = 0; x < sx; x++)
         for (var z = 0; z < sz; z++)
         {

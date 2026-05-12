@@ -38,6 +38,9 @@ if (Test-Path $packageDir) { Remove-Item -LiteralPath $packageDir -Recurse -Forc
 New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
 Copy-Item -LiteralPath $clientExe -Destination $packageDir -Force
 Copy-Item -LiteralPath $clientData -Destination $packageDir -Recurse -Force
+$externalAssetDir = Join-Path $packageDir "assets\r6"
+New-Item -ItemType Directory -Force -Path $externalAssetDir | Out-Null
+Copy-Item -Path (Join-Path $root "godot-client\assets\r6\*") -Destination $externalAssetDir -Force
 
 New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
 if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }

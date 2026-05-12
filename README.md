@@ -95,6 +95,19 @@ powershell -ExecutionPolicy Bypass -File tools/export-godot-android.ps1
 
 Observacao: o Godot instalado e x64, entao os scripts definem `DOTNET_ROOT` para `%USERPROFILE%\.dotnet9-x64`, onde fica o SDK .NET 9 x64 local usado pelo Godot 4.6.2.
 
+### Modelo R6 do client
+
+O client tenta carregar o R6 nesta ordem:
+
+```text
+<pasta do NovusWorldsClient.exe>/assets/r6/r6.gltf
+<pasta do NovusWorldsClient.exe>/r6.gltf
+%APPDATA%/Godot/app_userdata/Novus Worlds Client/r6.gltf
+res://assets/r6/r6.gltf
+```
+
+No repositorio, o arquivo usado para gerar o download fica em `godot-client/assets/r6/r6.gltf`. O pacote rapido tambem copia essa pasta como asset externo, entao trocar `godot-client/assets/r6/r6.gltf` e rodar `tools/fast-client-download.ps1` ja atualiza o ZIP. Para animacao por partes, o GLTF precisa ter seis meshes/nodes de R6 ou nomes reconheciveis como Head, Torso, LeftArm, RightArm, LeftLeg e RightLeg. Se nao tiver isso, o client carrega o GLTF inteiro como modelo, mas nao consegue aplicar animacoes R6 por membro.
+
 Para atualizar o download do client mais rapido depois de mudancas so em C#, rode `tools/NovusFastClientPackager.exe` ou `tools/fast-client-download.ps1`. Isso recompila o DLL do client e recria `public/download/NovusWorldsClient-Windows.zip` usando o ultimo export ja existente. Se voce mudou cenas, assets novos, texturas novas ou arquivos embutidos no pack da Godot, rode `tools/export-godot-windows.ps1` uma vez.
 
 ### Android

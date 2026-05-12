@@ -1,6 +1,9 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
 public partial class R6Character : CharacterBody3D
@@ -162,12 +165,22 @@ public partial class R6Character : CharacterBody3D
 
     private Node3D? CreateLocalR6Visual()
     {
-        var scene = GD.Load<PackedScene>("res://assets/r6/r6.gltf");
-        if (scene == null) return null;
-        var imported = scene.Instantiate<Node3D>();
+        var (imported, sourcePath) = InstantiateR6Source();
+        if (imported == null) return null;
         var sources = CollectLocalR6Sources(imported);
+        if (!sources.HasCompleteRig)
+        {
+            var wholeModel = CreateWholeImportedR6(imported, sourcePath);
+            if (wholeModel != null)
+            {
+                GD.Print($"Novus R6 loaded as whole GLTF model: {sourcePath}");
+                return wholeModel;
+            }
+            imported.QueueFree();
+            return null;
+        }
         imported.QueueFree();
-        if (!sources.HasCompleteRig) return null;
+        GD.Print($"Novus R6 loaded with animated part rig: {sourcePath}");
 
         var root = new Node3D { Name = "LocalR6Asset" };
         AddImportedPart(root, "Torso", new Vector3(0, 2.1f, 0), Vector3.Zero, new Vector3(2f, 2f, 1f), new Color(0.05f, 0.41f, 0.67f), sources.Torso);
@@ -176,6 +189,59 @@ public partial class R6Character : CharacterBody3D
         AddImportedPart(root, "RightArm", new Vector3(1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f), sources.RightArm);
         AddImportedPart(root, "LeftLeg", new Vector3(-0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f), sources.LeftLeg);
         AddImportedPart(root, "RightLeg", new Vector3(0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f), sources.RightLeg);
+        AddFace(root);
+        return root;
+    }
+
+    private (Node3D? Imported, string SourcePath) InstantiateR6Source()
+    {
+        foreach (var path in ExternalR6Paths())
+        {
+            if (!File.Exists(path)) continue;
+            try
+            {
+                var state = new GltfState();
+                var document = new GltfDocument();
+                var basePath = Path.GetDirectoryName(path) ?? "";
+                if (document.AppendFromFile(path, state, 0, basePath) == Error.Ok && document.GenerateScene(state) is Node3D model)
+                    return (model, path);
+            }
+            catch (Exception ex)
+            {
+                GD.PushWarning($"External R6 not loaded from {path}: {ex.Message}");
+            }
+        }
+
+        var scene = GD.Load<PackedScene>("res://assets/r6/r6.gltf");
+        return scene == null ? (null, "res://assets/r6/r6.gltf") : (scene.Instantiate<Node3D>(), "res://assets/r6/r6.gltf");
+    }
+
+    private static IEnumerable<string> ExternalR6Paths()
+    {
+        var exeDir = Path.GetDirectoryName(OS.GetExecutablePath()) ?? Directory.GetCurrentDirectory();
+        yield return Path.Combine(exeDir, "assets", "r6", "r6.gltf");
+        yield return Path.Combine(exeDir, "r6.gltf");
+        yield return Path.Combine(OS.GetUserDataDir(), "r6.gltf");
+    }
+
+    private Node3D? CreateWholeImportedR6(Node3D imported, string sourcePath)
+    {
+        var meshes = new List<(MeshInstance3D Mesh, Vector3 Center)>();
+        CollectMeshInstances(imported, Transform3D.Identity, meshes);
+        if (meshes.Count == 0) return null;
+        var bounds = CombinedAabb(imported);
+        if (bounds.Size.Y <= 0.001f) return null;
+        var scale = 4.35f / bounds.Size.Y;
+        var root = new Node3D { Name = "LocalR6Asset" };
+        imported.Name = "ImportedWholeR6";
+        imported.Scale = Vector3.One * scale;
+        imported.Position = new Vector3(
+            -(bounds.Position.X + bounds.Size.X * 0.5f) * scale,
+            -bounds.Position.Y * scale + 0.1f,
+            -(bounds.Position.Z + bounds.Size.Z * 0.5f) * scale
+        );
+        root.AddChild(imported);
+        ApplyClassicShaderToImported(root, new Color(0.96f, 0.8f, 0.19f));
         AddFace(root);
         return root;
     }
@@ -196,7 +262,7 @@ public partial class R6Character : CharacterBody3D
     private static void AddBlock(Node root, string name, Vector3 pos, Vector3 size, Color color)
     {
         var mesh = new MeshInstance3D { Name = name, Position = pos, Mesh = new BoxMesh { Size = size } };
-        mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.75f };
+        mesh.MaterialOverride = ClassicPlastic.Material(color);
         root.AddChild(mesh);
     }
 
@@ -204,7 +270,7 @@ public partial class R6Character : CharacterBody3D
     {
         var pivot = new Node3D { Name = name, Position = pivotPos };
         var mesh = new MeshInstance3D { Name = $"{name}Mesh", Position = meshOffset, Mesh = new BoxMesh { Size = size } };
-        mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.68f };
+        mesh.MaterialOverride = ClassicPlastic.Material(color);
         pivot.AddChild(mesh);
         root.AddChild(pivot);
     }
@@ -223,7 +289,7 @@ public partial class R6Character : CharacterBody3D
         var center = aabb.Position + aabb.Size * 0.5f;
         mesh.Scale = scale;
         mesh.Position = meshCenterOffset - Multiply(center, scale);
-        mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.72f, TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest };
+        mesh.MaterialOverride = ClassicPlastic.Material(color);
         pivot.AddChild(mesh);
         root.AddChild(pivot);
     }
@@ -306,6 +372,73 @@ public partial class R6Character : CharacterBody3D
             CollectMeshInstances(child, transform, meshes);
     }
 
+    private static Aabb CombinedAabb(Node3D root)
+    {
+        var hasBounds = false;
+        var bounds = new Aabb();
+        CombineAabbRecursive(root, Transform3D.Identity, ref bounds, ref hasBounds);
+        return hasBounds ? bounds : new Aabb(Vector3.Zero, Vector3.One);
+    }
+
+    private static void CombineAabbRecursive(Node node, Transform3D parentTransform, ref Aabb bounds, ref bool hasBounds)
+    {
+        var transform = parentTransform;
+        if (node is Node3D node3D) transform = parentTransform * node3D.Transform;
+        if (node is MeshInstance3D mesh && mesh.Mesh != null)
+        {
+            var local = mesh.Mesh.GetAabb();
+            var corners = new[]
+            {
+                local.Position,
+                local.Position + new Vector3(local.Size.X, 0, 0),
+                local.Position + new Vector3(0, local.Size.Y, 0),
+                local.Position + new Vector3(0, 0, local.Size.Z),
+                local.Position + new Vector3(local.Size.X, local.Size.Y, 0),
+                local.Position + new Vector3(local.Size.X, 0, local.Size.Z),
+                local.Position + new Vector3(0, local.Size.Y, local.Size.Z),
+                local.Position + local.Size
+            };
+            foreach (var corner in corners)
+            {
+                var point = transform * corner;
+                if (!hasBounds)
+                {
+                    bounds = new Aabb(point, Vector3.Zero);
+                    hasBounds = true;
+                }
+                else bounds = bounds.Expand(point);
+            }
+        }
+        foreach (var child in node.GetChildren())
+            CombineAabbRecursive(child, transform, ref bounds, ref hasBounds);
+    }
+
+    private static void ApplyClassicShaderToImported(Node node, Color fallbackColor)
+    {
+        if (node is MeshInstance3D mesh)
+        {
+            var texture = ExtractAlbedoTexture(mesh);
+            var color = ExtractAlbedoColor(mesh, fallbackColor);
+            mesh.MaterialOverride = ClassicPlastic.Material(color, texture);
+        }
+        foreach (var child in node.GetChildren())
+            ApplyClassicShaderToImported(child, fallbackColor);
+    }
+
+    private static Texture2D? ExtractAlbedoTexture(MeshInstance3D mesh)
+    {
+        if (mesh.MaterialOverride is StandardMaterial3D overrideMat && overrideMat.AlbedoTexture is Texture2D overrideTexture) return overrideTexture;
+        if (mesh.Mesh?.GetSurfaceCount() > 0 && mesh.Mesh.SurfaceGetMaterial(0) is StandardMaterial3D surfaceMat && surfaceMat.AlbedoTexture is Texture2D surfaceTexture) return surfaceTexture;
+        return null;
+    }
+
+    private static Color ExtractAlbedoColor(MeshInstance3D mesh, Color fallback)
+    {
+        if (mesh.MaterialOverride is StandardMaterial3D overrideMat) return overrideMat.AlbedoColor;
+        if (mesh.Mesh?.GetSurfaceCount() > 0 && mesh.Mesh.SurfaceGetMaterial(0) is StandardMaterial3D surfaceMat) return surfaceMat.AlbedoColor;
+        return fallback;
+    }
+
     private static void AddPyramidHead(Node root, Vector3 pivotPos, Color color)
     {
         var pivot = new Node3D { Name = "Head", Position = pivotPos };
@@ -313,7 +446,7 @@ public partial class R6Character : CharacterBody3D
         {
             Name = "HeadMesh",
             Mesh = CreatePyramidMesh(),
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.72f, TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest }
+            MaterialOverride = ClassicPlastic.Material(color)
         };
         pivot.AddChild(mesh);
         root.AddChild(pivot);
@@ -503,12 +636,12 @@ public partial class R6Character : CharacterBody3D
     {
         var node = visual.FindChild(name, true, false);
         if (node is MeshInstance3D mesh)
-            mesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.72f };
+            mesh.MaterialOverride = ClassicPlastic.Material(color);
         else if (node is Node3D root)
         {
             foreach (var child in root.GetChildren())
                 if (child is MeshInstance3D childMesh && childMesh.Name == $"{name}Mesh")
-                    childMesh.MaterialOverride = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.72f };
+                    childMesh.MaterialOverride = ClassicPlastic.Material(color);
         }
     }
 
@@ -661,7 +794,7 @@ public partial class R6Character : CharacterBody3D
             RotationDegrees = item.HatRotation,
             Scale = item.HatScale
         };
-        hat.MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.08f), Roughness = 0.55f };
+        hat.MaterialOverride = ClassicPlastic.Material(new Color(0.08f, 0.08f, 0.08f));
         hat.Visible = string.IsNullOrWhiteSpace(item.ModelUrl);
         visual.AddChild(hat);
         _ = TryReplaceHatWithModel(item, hat);
@@ -686,10 +819,11 @@ public partial class R6Character : CharacterBody3D
                 fallback.QueueFree();
                 return;
             }
+            var modelBytes = await ModelBytesWithEmbeddedDependencies(item.ModelUrl, result.Body);
             var state = new GltfState();
             var document = new GltfDocument();
             var hint = item.ModelUrl.EndsWith(".glb", System.StringComparison.OrdinalIgnoreCase) ? "novus_hat.glb" : "novus_hat.gltf";
-            if (document.AppendFromBuffer(result.Body, hint, state) != Error.Ok)
+            if (document.AppendFromBuffer(modelBytes, hint, state) != Error.Ok)
             {
                 fallback.QueueFree();
                 return;
@@ -719,10 +853,52 @@ public partial class R6Character : CharacterBody3D
         if (node is MeshInstance3D mesh)
         {
             mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
-            if (mesh.MaterialOverride is StandardMaterial3D mat) mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
+            mesh.MaterialOverride = ClassicPlastic.Material(ExtractAlbedoColor(mesh, new Color(0.08f, 0.08f, 0.08f)), ExtractAlbedoTexture(mesh));
         }
         foreach (var child in node.GetChildren())
             PrepareImportedHat(child);
+    }
+
+    private async Task<byte[]> ModelBytesWithEmbeddedDependencies(string modelUrl, byte[] body)
+    {
+        if (modelUrl.EndsWith(".glb", StringComparison.OrdinalIgnoreCase)) return body;
+        try
+        {
+            var root = JsonNode.Parse(Encoding.UTF8.GetString(body)) as JsonObject;
+            if (root == null) return body;
+            await EmbedGltfUris(modelUrl, root["buffers"] as JsonArray, "application/octet-stream");
+            await EmbedGltfUris(modelUrl, root["images"] as JsonArray, "image/png");
+            return Encoding.UTF8.GetBytes(root.ToJsonString());
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"Hat dependency embedding skipped: {ex.Message}");
+            return body;
+        }
+    }
+
+    private async Task EmbedGltfUris(string modelUrl, JsonArray? array, string fallbackMime)
+    {
+        if (array == null) return;
+        foreach (var entry in array)
+        {
+            if (entry is not JsonObject obj) continue;
+            var uri = obj["uri"]?.GetValue<string>() ?? "";
+            if (string.IsNullOrWhiteSpace(uri) || uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) continue;
+            var absolute = new Uri(new Uri(modelUrl), uri).ToString();
+            var bytes = await LoadImageBytes(absolute);
+            obj["uri"] = $"data:{MimeFor(uri, fallbackMime)};base64,{Convert.ToBase64String(bytes)}";
+        }
+    }
+
+    private static string MimeFor(string uri, string fallback)
+    {
+        var lower = uri.ToLowerInvariant();
+        if (lower.EndsWith(".jpg") || lower.EndsWith(".jpeg")) return "image/jpeg";
+        if (lower.EndsWith(".webp")) return "image/webp";
+        if (lower.EndsWith(".png")) return "image/png";
+        if (lower.EndsWith(".bin")) return "application/octet-stream";
+        return fallback;
     }
 
     private static Task<HttpResult> WaitForHttp(HttpRequest http)
