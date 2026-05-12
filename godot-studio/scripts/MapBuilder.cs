@@ -43,7 +43,7 @@ public static class MapBuilder
             var mesh = new MeshInstance3D();
             mesh.Mesh = MeshFor(part);
             mesh.CastShadow = part.CastShadow ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
-            mesh.MaterialOverride = ClassicPlastic.Material(part.Color, SurfaceFor(part.Material), 1f - part.Transparency);
+            mesh.MaterialOverride = ClassicPlastic.Material(part.Color, SurfaceFor(part.Material), 1f - part.Transparency, TextureScaleFor(part));
             body.AddChild(mesh);
 
             if (part.CanCollide)
@@ -78,8 +78,19 @@ public static class MapBuilder
     private static Texture2D? SurfaceFor(string material)
     {
         LoadSurfaces();
+        if (material.Equals("Neon", System.StringComparison.OrdinalIgnoreCase) || material.Equals("Glass", System.StringComparison.OrdinalIgnoreCase))
+            return null;
         var index = System.Array.FindIndex(SurfaceOrder, item => item.Equals(material, System.StringComparison.OrdinalIgnoreCase));
         return index >= 0 && index < SurfaceTextures.Length ? SurfaceTextures[index] : SurfaceTextures[0];
+    }
+
+    private static Vector2 TextureScaleFor(NovusPart part)
+    {
+        var tileStuds = part.Material.Equals("Brick", System.StringComparison.OrdinalIgnoreCase) ? 3f : 4f;
+        return new Vector2(
+            Mathf.Max(1f, part.Size.X / tileStuds),
+            Mathf.Max(1f, part.Size.Z / tileStuds)
+        );
     }
 
     private static void LoadSurfaces()

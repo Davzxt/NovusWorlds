@@ -123,7 +123,7 @@ router.post('/studio-tickets', (req, res) => {
     if (game.creator_id !== req.session.user.id && !req.session.user.is_admin) return res.status(403).json({ error: 'Sem permissao.' });
   }
   const ticket = crypto.randomBytes(24).toString('hex');
-  tickets.set(ticket, { userId: user.id, username: user.username, gameId: gameId || 0, mode: 'studio', createdAt: Date.now() });
+  tickets.set(ticket, { userId: user.id, username: user.username, gameId: gameId || 0, mode: 'studio', isAdmin: !!req.session.user.is_admin, createdAt: Date.now() });
   res.json({
     ticket,
     gameId,
@@ -196,12 +196,18 @@ router.get('/studio-project', (req, res) => {
   const ticket = String(req.query.ticket || '');
   const entry = tickets.get(ticket);
   if (!entry || entry.mode !== 'studio' || Date.now() - entry.createdAt > TICKET_TTL_MS) return res.status(403).json({ error: 'Ticket invalido.' });
+  const requestedGameId = Number(req.query.gameId || entry.gameId || 0);
   let game = null;
-  if (entry.gameId) game = db.prepare('SELECT * FROM games WHERE id = ?').get(entry.gameId);
+  if (requestedGameId) {
+    game = db.prepare('SELECT * FROM games WHERE id = ?').get(requestedGameId);
+    if (!game) return res.status(404).json({ error: 'Projeto nao encontrado.' });
+    if (game.creator_id !== entry.userId && !entry.isAdmin) return res.status(403).json({ error: 'Sem permissao.' });
+    entry.gameId = requestedGameId;
+  }
   res.json({
     mode: 'studio',
     username: entry.username,
-    gameId: entry.gameId || null,
+    gameId: game?.id || entry.gameId || null,
     title: game?.title || 'Novo Mundo',
     description: game?.description || '',
     thumbnail_url: game?.thumbnail_url || '',
@@ -215,6 +221,20 @@ router.get('/studio-project', (req, res) => {
       skyColor: '#87CEEB'
     }
   });
+});
+
+router.get('/studio-games', (req, res) => {
+  const ticket = String(req.query.ticket || '');
+  const entry = tickets.get(ticket);
+  if (!entry || entry.mode !== 'studio' || Date.now() - entry.createdAt > TICKET_TTL_MS) return res.status(403).json({ error: 'Ticket invalido.' });
+  const games = db.prepare(`
+    SELECT id, title, description, thumbnail_url, is_active, updated_at
+    FROM games
+    WHERE creator_id = ?
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 80
+  `).all(entry.userId);
+  res.json({ games });
 });
 
 router.post('/studio-project/save', (req, res) => {

@@ -275,8 +275,10 @@ public partial class R6Character : CharacterBody3D
         root.AddChild(pivot);
     }
 
-    private static void AddImportedPart(Node root, string name, Vector3 pivotPos, Vector3 meshCenterOffset, Vector3 desiredSize, Color color, Mesh meshResource)
+    private static void AddImportedPart(Node root, string name, Vector3 pivotPos, Vector3 meshCenterOffset, Vector3 desiredSize, Color color, MeshInstance3D sourceMesh)
     {
+        var meshResource = sourceMesh.Mesh;
+        if (meshResource == null) return;
         var pivot = new Node3D { Name = name, Position = pivotPos };
         var mesh = new MeshInstance3D { Name = $"{name}Mesh", Mesh = meshResource };
         var aabb = meshResource.GetAabb();
@@ -289,7 +291,7 @@ public partial class R6Character : CharacterBody3D
         var center = aabb.Position + aabb.Size * 0.5f;
         mesh.Scale = scale;
         mesh.Position = meshCenterOffset - Multiply(center, scale);
-        mesh.MaterialOverride = ClassicPlastic.Material(color);
+        mesh.MaterialOverride = ClassicPlastic.Material(color, ExtractAlbedoTexture(sourceMesh));
         pivot.AddChild(mesh);
         root.AddChild(pivot);
     }
@@ -317,27 +319,27 @@ public partial class R6Character : CharacterBody3D
             var pos = entry.Center;
             if (name.Contains("head") || name.Contains("pyramid") || pos.Y > 1.8f)
             {
-                sources.Head = mesh.Mesh;
+                sources.Head = mesh;
             }
             else if ((name.Contains("torso") || name.Contains("body")) || (pos.Y > 0.75f && Mathf.Abs(pos.X) < 0.35f))
             {
-                sources.Torso = mesh.Mesh;
+                sources.Torso = mesh;
             }
             else if ((name.Contains("left") && name.Contains("arm")) || (pos.Y > 0.75f && pos.X < 0))
             {
-                sources.LeftArm = mesh.Mesh;
+                sources.LeftArm = mesh;
             }
             else if ((name.Contains("right") && name.Contains("arm")) || pos.Y > 0.75f)
             {
-                sources.RightArm = mesh.Mesh;
+                sources.RightArm = mesh;
             }
             else if ((name.Contains("left") && name.Contains("leg")) || pos.X < 0)
             {
-                sources.LeftLeg = mesh.Mesh;
+                sources.LeftLeg = mesh;
             }
             else
             {
-                sources.RightLeg = mesh.Mesh;
+                sources.RightLeg = mesh;
             }
         }
         if (!sources.HasCompleteRig && meshes.Count >= 6)
@@ -345,15 +347,15 @@ public partial class R6Character : CharacterBody3D
             meshes.Sort((a, b) => a.Center.Y.CompareTo(b.Center.Y));
             var legs = new List<(MeshInstance3D Mesh, Vector3 Center)> { meshes[0], meshes[1] };
             legs.Sort((a, b) => a.Center.X.CompareTo(b.Center.X));
-            sources.LeftLeg = legs[0].Mesh.Mesh;
-            sources.RightLeg = legs[1].Mesh.Mesh;
+            sources.LeftLeg = legs[0].Mesh;
+            sources.RightLeg = legs[1].Mesh;
 
             var middle = new List<(MeshInstance3D Mesh, Vector3 Center)> { meshes[2], meshes[3], meshes[4] };
             middle.Sort((a, b) => a.Center.X.CompareTo(b.Center.X));
-            sources.LeftArm = middle[0].Mesh.Mesh;
-            sources.Torso = middle[1].Mesh.Mesh;
-            sources.RightArm = middle[2].Mesh.Mesh;
-            sources.Head = meshes[^1].Mesh.Mesh;
+            sources.LeftArm = middle[0].Mesh;
+            sources.Torso = middle[1].Mesh;
+            sources.RightArm = middle[2].Mesh;
+            sources.Head = meshes[^1].Mesh;
         }
         return sources;
     }
@@ -819,13 +821,18 @@ public partial class R6Character : CharacterBody3D
                 fallback.QueueFree();
                 return;
             }
-            var modelBytes = await ModelBytesWithEmbeddedDependencies(item.ModelUrl, result.Body);
             var state = new GltfState();
             var document = new GltfDocument();
             var hint = item.ModelUrl.EndsWith(".glb", System.StringComparison.OrdinalIgnoreCase) ? "novus_hat.glb" : "novus_hat.gltf";
-            if (document.AppendFromBuffer(modelBytes, hint, state) != Error.Ok)
+            var modelBytes = await ModelBytesWithEmbeddedDependencies(item.ModelUrl, result.Body);
+            var tempPath = Path.Combine(OS.GetUserDataDir(), $"novus_hat_{item.Id}_{Guid.NewGuid():N}_{hint}");
+            File.WriteAllBytes(tempPath, modelBytes);
+            var appendError = document.AppendFromFile(tempPath, state, 0, Path.GetDirectoryName(tempPath) ?? "");
+            try { File.Delete(tempPath); } catch { }
+            if (appendError != Error.Ok)
             {
                 fallback.QueueFree();
+                GD.PushWarning($"Hat GLTF append failed for {item.Name}: {appendError}");
                 return;
             }
             if (document.GenerateScene(state) is not Node3D model)
@@ -921,14 +928,14 @@ public partial class R6Character : CharacterBody3D
 
     private sealed class LocalR6Sources
     {
-        public Mesh? Head;
-        public Mesh? Torso;
-        public Mesh? LeftArm;
-        public Mesh? RightArm;
-        public Mesh? LeftLeg;
-        public Mesh? RightLeg;
+        public MeshInstance3D? Head;
+        public MeshInstance3D? Torso;
+        public MeshInstance3D? LeftArm;
+        public MeshInstance3D? RightArm;
+        public MeshInstance3D? LeftLeg;
+        public MeshInstance3D? RightLeg;
 
-        public bool HasCompleteRig => Head != null && Torso != null && LeftArm != null && RightArm != null && LeftLeg != null && RightLeg != null;
+        public bool HasCompleteRig => Head?.Mesh != null && Torso?.Mesh != null && LeftArm?.Mesh != null && RightArm?.Mesh != null && LeftLeg?.Mesh != null && RightLeg?.Mesh != null;
     }
 
     private sealed class ChatBubbleRow

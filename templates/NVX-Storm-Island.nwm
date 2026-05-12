@@ -1,0 +1,37 @@
+{
+  "format": "NovusWorldModel",
+  "version": 1,
+  "gameId": 0,
+  "title": "NVX Storm Island",
+  "description": "Template editavel de sobrevivencia por rodadas: lobby, ilha, abrigos, torre, vulcao, enchente e meteoros.",
+  "thumbnail_url": "",
+  "maxPlayers": 20,
+  "map": {
+    "name": "NVX Storm Island",
+    "version": 1,
+    "objects": [
+      {"id":"baseplate","type":"Part","parentId":"","name":"Baseplate","position":{"x":0,"y":-0.5,"z":0},"rotation":{"x":0,"y":0,"z":0},"size":{"x":180,"y":1,"z":180},"color":"#2E853D","material":"Grass","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"spawn","type":"SpawnPoint","parentId":"","name":"SpawnPoint","position":{"x":0,"y":0.25,"z":0},"rotation":{"x":0,"y":0,"z":0},"size":{"x":8,"y":0.5,"z":8},"color":"#1AF047","material":"Neon","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"island","type":"Part","parentId":"","name":"Storm Island","position":{"x":0,"y":0.05,"z":-42},"rotation":{"x":0,"y":0,"z":0},"size":{"x":76,"y":0.35,"z":58},"color":"#3D9447","material":"Grass","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"ocean","type":"Part","parentId":"","name":"Ocean Kill Plane","position":{"x":0,"y":-7,"z":0},"rotation":{"x":0,"y":0,"z":0},"size":{"x":260,"y":1,"z":260},"color":"#0C38A6","material":"Glass","anchored":true,"canCollide":false,"locked":false,"visible":true,"castShadow":false,"transparency":0.42,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"shelter_floor","type":"Part","parentId":"","name":"Shelter Floor","position":{"x":-22,"y":0.8,"z":-45},"rotation":{"x":0,"y":0,"z":0},"size":{"x":20,"y":1,"z":18},"color":"#8C8C8C","material":"Stone","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"shelter_back","type":"Part","parentId":"","name":"Shelter Back Wall","position":{"x":-22,"y":5.3,"z":-54},"rotation":{"x":0,"y":0,"z":0},"size":{"x":20,"y":9,"z":1},"color":"#6B6B6B","material":"Stone","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"shelter_left","type":"Part","parentId":"","name":"Shelter Left Wall","position":{"x":-32,"y":5.3,"z":-45},"rotation":{"x":0,"y":0,"z":0},"size":{"x":1,"y":9,"z":18},"color":"#6B6B6B","material":"Stone","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"shelter_right","type":"Part","parentId":"","name":"Shelter Right Wall","position":{"x":-12,"y":5.3,"z":-45},"rotation":{"x":0,"y":0,"z":0},"size":{"x":1,"y":9,"z":18},"color":"#6B6B6B","material":"Stone","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"shelter_roof","type":"Part","parentId":"","name":"Shelter Roof","position":{"x":-22,"y":10.1,"z":-45},"rotation":{"x":0,"y":0,"z":0},"size":{"x":22,"y":1,"z":20},"color":"#5C5C5C","material":"Metal","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"tower_base","type":"Part","parentId":"","name":"Watch Tower Base","position":{"x":24,"y":0.85,"z":-48},"rotation":{"x":0,"y":0,"z":0},"size":{"x":14,"y":1,"z":14},"color":"#73401F","material":"Wood","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"tower_top","type":"Part","parentId":"","name":"Watch Tower Top","position":{"x":24,"y":8.8,"z":-26},"rotation":{"x":0,"y":0,"z":0},"size":{"x":16,"y":1,"z":16},"color":"#80471F","material":"Wood","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"volcano","type":"Cylinder","parentId":"","name":"Volcano Core","position":{"x":40,"y":8,"z":-66},"rotation":{"x":0,"y":0,"z":0},"size":{"x":18,"y":16,"z":18},"color":"#3D1F14","material":"Stone","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"lava","type":"Cylinder","parentId":"","name":"Lava Vent","position":{"x":40,"y":16.5,"z":-66},"rotation":{"x":0,"y":0,"z":0},"size":{"x":10,"y":1,"z":10},"color":"#FF2603","material":"Neon","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"meteor1","type":"Ball","parentId":"","name":"Meteor Marker 1","position":{"x":-2,"y":18,"z":-42},"rotation":{"x":0,"y":0,"z":0},"size":{"x":5,"y":5,"z":5},"color":"#E67214","material":"Neon","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]},
+      {"id":"safe_rock","type":"Part","parentId":"","name":"Flood Safe Rock","position":{"x":-42,"y":3,"z":-28},"rotation":{"x":0,"y":0,"z":0},"size":{"x":16,"y":6,"z":14},"color":"#66666E","material":"Stone","anchored":true,"canCollide":true,"locked":false,"visible":true,"castShadow":true,"transparency":0,"reflectance":0,"brightness":1.2,"range":18,"children":[]}
+    ],
+    "scripts": [
+      {"id":"round_controller","name":"DisasterRoundController","parentId":"","source":"local disasters = {\"Meteor Shower\", \"Flash Flood\", \"Volcanic Eruption\", \"Lightning Storm\"}\nlocal roundTime = 90\n\nprint(\"NVX Storm Island loaded\")\n\ngame.on(\"playerJoin\", function(player)\n  player:setHealth(100)\n  player:teleport(0, 6, 0)\nend)\n\nfunction startRound()\n  local disaster = disasters[math.random(1, #disasters)]\n  print(\"Disaster: \" .. disaster)\n  for _, player in pairs(game.players) do\n    player:teleport(0, 8, -42)\n    game.setScore(player.id, 0)\n  end\nend\n","disabled":false}
+    ],
+    "spawnPoints": [{"x":0,"y":5,"z":0}],
+    "maxPlayers": 20,
+    "ambient": "#404040",
+    "skyColor": "#8CC7FF"
+  }
+}

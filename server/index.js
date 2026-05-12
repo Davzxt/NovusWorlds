@@ -46,8 +46,13 @@ const sessionMiddleware = session({
   cookie: { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' ? 'auto' : false, maxAge: 30 * 24 * 60 * 60 * 1000 }
 });
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use((err, req, res, next) => {
+  if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Payload JSON muito grande.' });
+  if (err instanceof SyntaxError && 'body' in err) return res.status(400).json({ error: 'JSON invalido no corpo da requisicao.' });
+  next(err);
+});
 app.use(sessionMiddleware);
 app.use('/admin', (req, res, next) => {
   if (req.path.endsWith('.html') || req.path === '/' || req.path === '') {

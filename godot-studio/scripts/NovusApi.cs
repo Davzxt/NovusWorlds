@@ -22,11 +22,13 @@ public static class NovusApi
         return ParseMap(mapJson, root.TryGetProperty("title", out var title) ? title.GetString() ?? "Novus Place" : "Novus Place");
     }
 
-    public static async Task<NovusMap> LoadStudioProject(string baseUrl, string ticket)
+    public static async Task<NovusMap> LoadStudioProject(string baseUrl, string ticket, int requestedGameId = 0)
     {
         var http = new HttpRequest();
         AddChildTemp(http);
-        var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/studio-project?ticket={Uri.EscapeDataString(ticket)}");
+        var url = $"{baseUrl.TrimEnd('/')}/api/legacy/studio-project?ticket={Uri.EscapeDataString(ticket)}";
+        if (requestedGameId > 0) url += $"&gameId={requestedGameId}";
+        var err = http.Request(url);
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
         if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}");
@@ -35,11 +37,36 @@ public static class NovusApi
         var root = doc.RootElement;
         var mapJson = root.TryGetProperty("map", out var map) ? map : root;
         var parsed = ParseMap(mapJson, root.TryGetProperty("title", out var title) ? title.GetString() ?? "Novo Mundo" : "Novo Mundo");
-        parsed.GameId = root.TryGetProperty("gameId", out var gameId) && gameId.TryGetInt32(out var id) ? id : 0;
+        parsed.GameId = root.TryGetProperty("gameId", out var gameIdElement) && gameIdElement.TryGetInt32(out var id) ? id : 0;
         parsed.Description = root.TryGetProperty("description", out var description) ? description.GetString() ?? "" : "";
         parsed.ThumbnailUrl = root.TryGetProperty("thumbnail_url", out var thumbnail) ? thumbnail.GetString() ?? "" : "";
         if (root.TryGetProperty("maxPlayers", out var maxPlayers) && maxPlayers.TryGetInt32(out var max)) parsed.MaxPlayers = Math.Clamp(max, 1, 20);
         return parsed;
+    }
+
+    public static async Task<List<StudioGameSummary>> LoadStudioGames(string baseUrl, string ticket)
+    {
+        var http = new HttpRequest();
+        AddChildTemp(http);
+        var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/studio-games?ticket={Uri.EscapeDataString(ticket)}");
+        if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
+        var result = await WaitForRequest(http);
+        if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}: {ShortBody(result.Body)}");
+        var games = new List<StudioGameSummary>();
+        using var doc = JsonDocument.Parse(result.Body.GetStringFromUtf8());
+        if (!doc.RootElement.TryGetProperty("games", out var list) || list.ValueKind != JsonValueKind.Array) return games;
+        foreach (var item in list.EnumerateArray())
+        {
+            games.Add(new StudioGameSummary
+            {
+                Id = item.TryGetProperty("id", out var id) && id.TryGetInt32(out var parsedId) ? parsedId : 0,
+                Title = GetString(item, "title", "Sem nome"),
+                Description = GetString(item, "description", ""),
+                UpdatedAt = GetString(item, "updated_at", ""),
+                IsActive = GetBool(item, "is_active", false)
+            });
+        }
+        return games;
     }
 
     public static async Task<int> SaveStudioProject(string baseUrl, string ticket, NovusMap map, bool publish)
@@ -65,9 +92,17 @@ public static class NovusApi
         );
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
-        if (result.ResponseCode >= 400) throw new Exception(result.Body.GetStringFromUtf8());
-        using var doc = JsonDocument.Parse(result.Body.GetStringFromUtf8());
-        return doc.RootElement.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out var id) ? id : map.GameId;
+        var responseText = result.Body.GetStringFromUtf8();
+        if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}: {ShortBody(result.Body)}");
+        try
+        {
+            using var doc = JsonDocument.Parse(responseText);
+            return doc.RootElement.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out var id) ? id : map.GameId;
+        }
+        catch (JsonException ex)
+        {
+            throw new Exception($"Resposta do servidor nao era JSON valido: {ex.Message}. Resposta: {ShortText(responseText)}");
+        }
     }
 
     private static void AddChildTemp(Node node)
@@ -86,6 +121,14 @@ public static class NovusApi
             else tcs.TrySetResult(new HttpResponse { ResponseCode = responseCode, Body = body });
         };
         return tcs.Task;
+    }
+
+    private static string ShortBody(byte[] body) => ShortText(body.GetStringFromUtf8());
+
+    private static string ShortText(string text)
+    {
+        text = (text ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+        return text.Length > 280 ? text[..280] + "..." : text;
     }
 
     public static NovusMap ParseMap(JsonElement mapJson, string title)

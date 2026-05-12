@@ -9,6 +9,7 @@ render_mode unshaded, cull_back, depth_draw_opaque;
 uniform vec4 albedo_color : source_color = vec4(0.95, 0.85, 0.35, 1.0);
 uniform sampler2D albedo_tex : source_color;
 uniform bool use_albedo_tex = false;
+uniform vec2 uv_scale = vec2(1.0, 1.0);
 
 uniform vec4 specular_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float spec_intensity : hint_range(0.0, 2.0) = 0.9;
@@ -29,7 +30,7 @@ void fragment() {
     ALPHA_HASH_SCALE = 1.0;
     vec4 base = albedo_color;
     if (use_albedo_tex) {
-        base *= texture(albedo_tex, UV);
+        base *= texture(albedo_tex, fract(UV * uv_scale));
     }
 
     vec3 N = normalize(world_normal);
@@ -49,12 +50,13 @@ void fragment() {
 
     private static Shader? shader;
 
-    public static ShaderMaterial Material(Color color, Texture2D? texture = null, float alpha = 1f)
+    public static ShaderMaterial Material(Color color, Texture2D? texture = null, float alpha = 1f, Vector2? uvScale = null)
     {
         shader ??= new Shader { Code = ShaderCode };
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("albedo_color", new Color(color.R, color.G, color.B, alpha));
         material.SetShaderParameter("use_albedo_tex", texture != null);
+        material.SetShaderParameter("uv_scale", uvScale ?? Vector2.One);
         if (texture != null) material.SetShaderParameter("albedo_tex", texture);
         material.SetShaderParameter("spec_intensity", 0.95f);
         material.SetShaderParameter("shininess", 34f);

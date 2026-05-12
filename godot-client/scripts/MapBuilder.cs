@@ -31,7 +31,7 @@ public static class MapBuilder
             var displayColor = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase)
                 ? new Color(0.25f, 0.45f, 0.25f)
                 : part.Color;
-            mesh.MaterialOverride = ClassicPlastic.Material(displayColor, null, 1f - part.Transparency);
+            mesh.MaterialOverride = ClassicPlastic.Material(displayColor, SurfaceFor(part), 1f - part.Transparency, TextureScaleFor(part));
             body.AddChild(mesh);
 
             if (part.CanCollide)
@@ -41,8 +41,6 @@ public static class MapBuilder
                 body.AddChild(collision);
             }
             root.AddChild(body);
-            if (part.Size.X >= 12 && part.Size.Z >= 12 && part.Transparency <= 0.05f)
-                AddSurfaceTiles(body, part, displayColor);
         }
         return root;
     }
@@ -93,5 +91,14 @@ public static class MapBuilder
         if (material.Contains("brick") || material.Contains("stone")) return SurfaceTextures[1];
         if (material.Contains("wood")) return SurfaceTextures[4];
         return SurfaceTextures[0];
+    }
+
+    private static Vector2 TextureScaleFor(NovusPart part)
+    {
+        var tileStuds = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase) ? 4f : 3f;
+        return new Vector2(
+            Mathf.Max(1f, part.Size.X / tileStuds),
+            Mathf.Max(1f, part.Size.Z / tileStuds)
+        );
     }
 }

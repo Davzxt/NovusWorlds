@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 public partial class StudioMain : Node3D
 {
@@ -43,14 +44,22 @@ public partial class StudioMain : Node3D
     private MeshInstance3D gridVisual = null!;
     private FileDialog openDialog = null!;
     private FileDialog importDialog = null!;
+    private Panel dashboardPanel = null!;
+    private ItemList dashboardGameList = null!;
+    private Label dashboardStatus = null!;
 
     private ToolMode mode = ToolMode.Select;
+    private enum GizmoAxis { None, X, Y, Z }
     private int selectedPart = -1;
     private int selectedScript = -1;
     private readonly List<int> selectedParts = new();
     private readonly List<NovusPart> clipboard = new();
     private readonly Stack<string> undo = new();
     private readonly Stack<string> redo = new();
+    private readonly List<int> dashboardGameIds = new();
+    private readonly Dictionary<int, Vector3> gizmoDragStartPositions = new();
+    private readonly Dictionary<int, Vector3> gizmoDragStartSizes = new();
+    private readonly Dictionary<int, Vector3> gizmoDragStartRotations = new();
     private string baseUrl = "http://localhost:3000";
     private string ticket = "";
     private bool cameraRotating;
@@ -67,6 +76,12 @@ public partial class StudioMain : Node3D
     private double fpsClock;
     private int fpsFrames;
     private Vector2 lastMousePosition;
+    private Vector2 gizmoDragStartMouse;
+    private Vector3 gizmoCenter;
+    private Vector3 gizmoExtents = Vector3.One;
+    private Vector3 gizmoAxisLengths = new(3f, 3f, 3f);
+    private GizmoAxis activeGizmoAxis = GizmoAxis.None;
+    private string gizmoVisualKey = "";
 
     public override async void _Ready()
     {
@@ -114,10 +129,21 @@ public partial class StudioMain : Node3D
                 if (mouse.Pressed)
                 {
                     if (mode == ToolMode.Paint) PaintHit(mouse.Position);
-                    else PickPart(mouse.Position, mouse.CtrlPressed);
-                    manipulatingSelection = selectedPart >= 0 && mode != ToolMode.Select;
+                    else if (mode != ToolMode.Select && TryBeginGizmoDrag(mouse.Position))
+                    {
+                        manipulatingSelection = true;
+                    }
+                    else
+                    {
+                        PickPart(mouse.Position, mouse.CtrlPressed);
+                        manipulatingSelection = false;
+                    }
                 }
-                else manipulatingSelection = false;
+                else
+                {
+                    manipulatingSelection = false;
+                    activeGizmoAxis = GizmoAxis.None;
+                }
             }
             if (mouse.Pressed && mouse.ButtonIndex == MouseButton.WheelUp) camera.Position += -camera.GlobalBasis.Z * 2f;
             if (mouse.Pressed && mouse.ButtonIndex == MouseButton.WheelDown) camera.Position += camera.GlobalBasis.Z * 2f;
@@ -138,7 +164,7 @@ public partial class StudioMain : Node3D
             }
             else if (manipulatingSelection)
             {
-                ManipulateSelectedWithMouse(motion.Relative);
+                ManipulateSelectedWithMouse(motion.Position);
             }
         }
         else if (ev is InputEventKey key && key.Pressed)
@@ -254,6 +280,7 @@ public partial class StudioMain : Node3D
         AddToolButton(top, "Save", "Salvar (Ctrl+S)", () => SaveProject(false));
         AddToolButton(top, "Publish", "Publicar jogo", OpenPublishDialog);
         AddToolButton(top, "Test", "Testar jogo salvo", TestGame);
+        AddToolButton(top, "Dashboard", "Abrir painel de projetos", ShowDashboard);
         AddToolButton(top, "Open", "Abrir .nwm", () => openDialog.PopupCentered(new Vector2I(720, 520)));
         AddToolButton(top, "Export", "Exportar .nwm", ExportProjectFile);
 
@@ -331,14 +358,16 @@ public partial class StudioMain : Node3D
         outputPanel.AddChild(fpsLabel);
 
         openDialog = new FileDialog { Access = FileDialog.AccessEnum.Filesystem, FileMode = FileDialog.FileModeEnum.OpenFile, Filters = new string[] { "*.nwm ; Novus World Model", "*.json ; JSON" } };
-        openDialog.FileSelected += path => { LoadProjectJson(File.ReadAllText(path)); RebuildWorkspace(); RebuildExplorer(); Log("Projeto aberto: " + path); };
+        openDialog.FileSelected += path => { LoadProjectJson(File.ReadAllText(path)); RebuildWorkspace(); RebuildExplorer(); ClearSelection(); SelectPart(0); HideDashboard(); Log("Projeto aberto: " + path); };
         rootUi.AddChild(openDialog);
 
         importDialog = new FileDialog { Access = FileDialog.AccessEnum.Filesystem, FileMode = FileDialog.FileModeEnum.OpenFile, Filters = new string[] { "*.nwm ; Novus World Model", "*.json ; JSON" } };
         rootUi.AddChild(importDialog);
         SetupExplorerMenu();
         SetupPublishDialog();
+        SetupDashboard();
         LayoutUi();
+        ShowDashboard();
     }
 
     private void SetupExplorerMenu()
@@ -385,6 +414,165 @@ public partial class StudioMain : Node3D
             SaveProject(true);
         };
         rootUi.AddChild(publishDialog);
+    }
+
+    private void SetupDashboard()
+    {
+        dashboardPanel = Panel(new Vector2(260, 86), new Vector2(820, 560), new Color(0.06f, 0.11f, 0.18f, 0.98f));
+        dashboardPanel.Name = "StudioDashboard";
+        rootUi.AddChild(dashboardPanel);
+
+        dashboardPanel.AddChild(new Label
+        {
+            Text = "Novus Worlds Studio",
+            Position = new Vector2(24, 18),
+            Size = new Vector2(500, 34),
+            Modulate = Colors.White
+        });
+        dashboardPanel.AddChild(new Label
+        {
+            Text = "Escolha um projeto, crie um novo mundo ou importe um arquivo .nwm.",
+            Position = new Vector2(24, 54),
+            Size = new Vector2(720, 24),
+            Modulate = new Color(0.82f, 0.91f, 1f)
+        });
+
+        dashboardGameList = new ItemList
+        {
+            Position = new Vector2(24, 96),
+            Size = new Vector2(520, 380),
+            AllowReselect = true,
+            CustomMinimumSize = new Vector2(520, 380)
+        };
+        dashboardGameList.ItemActivated += _ => OpenDashboardSelectedGame();
+        dashboardPanel.AddChild(dashboardGameList);
+
+        var actions = new VBoxContainer { Position = new Vector2(574, 96), Size = new Vector2(220, 300) };
+        dashboardPanel.AddChild(actions);
+        AddButton(actions, "Continuar projeto atual", HideDashboard);
+        AddButton(actions, "Criar jogo novo", NewProjectFromDashboard);
+        AddButton(actions, "Template NVX Storm Island", LoadStormIslandTemplate);
+        AddButton(actions, "Abrir selecionado", OpenDashboardSelectedGame);
+        AddButton(actions, "Importar .nwm", () => openDialog.PopupCentered(new Vector2I(720, 520)));
+        AddButton(actions, "Salvar atual", () => SaveProject(false));
+        AddButton(actions, "Publicar atual", OpenPublishDialog);
+
+        dashboardStatus = new Label
+        {
+            Text = "Carregando suas criacoes...",
+            Position = new Vector2(24, 492),
+            Size = new Vector2(760, 28),
+            Modulate = new Color(0.75f, 1f, 0.75f)
+        };
+        dashboardPanel.AddChild(dashboardStatus);
+        _ = LoadDashboardGames();
+    }
+
+    private void ShowDashboard()
+    {
+        if (dashboardPanel == null) return;
+        dashboardPanel.Visible = true;
+        dashboardPanel.MoveToFront();
+        _ = LoadDashboardGames();
+    }
+
+    private void HideDashboard()
+    {
+        if (dashboardPanel != null) dashboardPanel.Visible = false;
+    }
+
+    private async Task LoadDashboardGames()
+    {
+        if (dashboardGameList == null) return;
+        dashboardGameList.Clear();
+        dashboardGameIds.Clear();
+        if (string.IsNullOrWhiteSpace(ticket))
+        {
+            dashboardStatus.Text = "Sem ticket do site. Use Importar .nwm ou Criar jogo novo local.";
+            dashboardGameList.AddItem("Projeto local atual");
+            dashboardGameIds.Add(map.GameId);
+            return;
+        }
+        try
+        {
+            var games = await NovusApi.LoadStudioGames(baseUrl, ticket);
+            if (games.Count == 0)
+            {
+                dashboardStatus.Text = "Voce ainda nao tem criacoes salvas. Clique em Criar jogo novo.";
+                return;
+            }
+            foreach (var game in games)
+            {
+                dashboardGameList.AddItem($"{game.Title}  #{game.Id}  {(game.IsActive ? "Publicado" : "Rascunho")}");
+                dashboardGameIds.Add(game.Id);
+            }
+            dashboardStatus.Text = $"{games.Count} criacao(oes) encontradas.";
+        }
+        catch (Exception ex)
+        {
+            dashboardStatus.Text = "Nao consegui carregar suas criacoes: " + ex.Message;
+        }
+    }
+
+    private async void OpenDashboardSelectedGame()
+    {
+        if (dashboardGameList == null || dashboardGameList.GetSelectedItems().Length == 0)
+        {
+            dashboardStatus.Text = "Selecione um projeto primeiro.";
+            return;
+        }
+        var selected = dashboardGameList.GetSelectedItems()[0];
+        if (selected < 0 || selected >= dashboardGameIds.Count || dashboardGameIds[selected] <= 0)
+        {
+            HideDashboard();
+            return;
+        }
+        try
+        {
+            dashboardStatus.Text = "Abrindo projeto...";
+            map = await NovusApi.LoadStudioProject(baseUrl, ticket, dashboardGameIds[selected]);
+            if (map.Scripts.Count == 0) map.Scripts.Add(DefaultScript());
+            RebuildWorkspace();
+            RebuildExplorer();
+            ClearSelection();
+            SelectPart(0);
+            dirty = false;
+            UpdateWindowTitle();
+            HideDashboard();
+            Log("Projeto aberto: " + map.Name);
+        }
+        catch (Exception ex)
+        {
+            dashboardStatus.Text = "Erro ao abrir projeto: " + ex.Message;
+        }
+    }
+
+    private void NewProjectFromDashboard()
+    {
+        PushUndo();
+        map = CreateBlankProject();
+        RebuildWorkspace();
+        RebuildExplorer();
+        ClearSelection();
+        SelectPart(0);
+        dirty = true;
+        UpdateWindowTitle();
+        HideDashboard();
+        Log("Novo projeto criado.");
+    }
+
+    private void LoadStormIslandTemplate()
+    {
+        PushUndo();
+        map = NovusTemplates.StormIsland();
+        RebuildWorkspace();
+        RebuildExplorer();
+        ClearSelection();
+        SelectPart(0);
+        dirty = true;
+        UpdateWindowTitle();
+        HideDashboard();
+        Log("Template NVX Storm Island carregado.");
     }
 
     private void OpenPublishDialog()
@@ -504,6 +692,11 @@ public partial class StudioMain : Node3D
         objectCountLabel.Position = new Vector2(Mathf.Min(240, centerW * 0.26f), 48);
         mouseWorldLabel.Position = new Vector2(Mathf.Min(460, centerW * 0.52f), 48);
         fpsLabel.Position = new Vector2(Mathf.Max(650, centerW - 76), 48);
+        if (dashboardPanel != null)
+        {
+            dashboardPanel.Size = new Vector2(Mathf.Min(860, size.X - 80), Mathf.Min(580, size.Y - 90));
+            dashboardPanel.Position = new Vector2((size.X - dashboardPanel.Size.X) * 0.5f, 62);
+        }
     }
 
     private float CurrentSnapStep()
@@ -552,20 +745,29 @@ public partial class StudioMain : Node3D
 
     private void BuildGizmo()
     {
-        gizmoRoot.AddChild(GizmoArrow("X", Colors.Red, new Vector3(2.2f, 0, 0), new Vector3(0, 0, -90)));
-        gizmoRoot.AddChild(GizmoArrow("Y", Colors.Green, new Vector3(0, 2.2f, 0), Vector3.Zero));
-        gizmoRoot.AddChild(GizmoArrow("Z", Colors.Blue, new Vector3(0, 0, 2.2f), new Vector3(90, 0, 0)));
-        gizmoRoot.AddChild(GizmoCube("ScaleX", Colors.Red, new Vector3(2.6f, 0, 0)));
-        gizmoRoot.AddChild(GizmoCube("ScaleY", Colors.Green, new Vector3(0, 2.6f, 0)));
-        gizmoRoot.AddChild(GizmoCube("ScaleZ", Colors.Blue, new Vector3(0, 0, 2.6f)));
+        foreach (var child in gizmoRoot.GetChildren())
+        {
+            gizmoRoot.RemoveChild(child);
+            child.QueueFree();
+        }
+        var lx = gizmoAxisLengths.X;
+        var ly = gizmoAxisLengths.Y;
+        var lz = gizmoAxisLengths.Z;
+        gizmoRoot.AddChild(GizmoArrow("X", Colors.Red, new Vector3(lx, 0, 0), new Vector3(0, 0, -90)));
+        gizmoRoot.AddChild(GizmoArrow("Y", Colors.Green, new Vector3(0, ly, 0), Vector3.Zero));
+        gizmoRoot.AddChild(GizmoArrow("Z", Colors.Blue, new Vector3(0, 0, lz), new Vector3(90, 0, 0)));
+        gizmoRoot.AddChild(GizmoCube("ScaleX", Colors.Red, new Vector3(lx, 0, 0)));
+        gizmoRoot.AddChild(GizmoCube("ScaleY", Colors.Green, new Vector3(0, ly, 0)));
+        gizmoRoot.AddChild(GizmoCube("ScaleZ", Colors.Blue, new Vector3(0, 0, lz)));
     }
 
     private Node3D GizmoArrow(string name, Color color, Vector3 position, Vector3 rotation)
     {
         var root = new Node3D { Name = name };
         var mat = new StandardMaterial3D { AlbedoColor = color, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
-        var shaft = new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0.045f, BottomRadius = 0.045f, Height = 1.7f }, Position = position * 0.5f, RotationDegrees = rotation, MaterialOverride = mat };
-        var head = new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0f, BottomRadius = 0.16f, Height = 0.42f }, Position = position, RotationDegrees = rotation, MaterialOverride = mat };
+        var length = Mathf.Max(0.1f, position.Length());
+        var shaft = new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0.055f, BottomRadius = 0.055f, Height = length }, Position = position * 0.5f, RotationDegrees = rotation, MaterialOverride = mat };
+        var head = new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0f, BottomRadius = 0.22f, Height = 0.55f }, Position = position, RotationDegrees = rotation, MaterialOverride = mat };
         root.AddChild(shaft);
         root.AddChild(head);
         return root;
@@ -578,28 +780,55 @@ public partial class StudioMain : Node3D
 
     private void UpdateGizmo()
     {
-        if (gizmoRoot == null || selectedPart < 0 || selectedPart >= map.Objects.Count) return;
-        gizmoRoot.Position = map.Objects[selectedPart].Position;
+        if (gizmoRoot == null || selectedPart < 0 || selectedPart >= map.Objects.Count)
+        {
+            if (gizmoRoot != null) gizmoRoot.Visible = false;
+            return;
+        }
+        var bounds = SelectionBounds();
+        gizmoCenter = bounds.Position + bounds.Size * 0.5f;
+        gizmoExtents = new Vector3(Mathf.Max(0.5f, bounds.Size.X * 0.5f), Mathf.Max(0.5f, bounds.Size.Y * 0.5f), Mathf.Max(0.5f, bounds.Size.Z * 0.5f));
+        gizmoAxisLengths = new Vector3(gizmoExtents.X + 2.2f, gizmoExtents.Y + 2.2f, gizmoExtents.Z + 2.2f);
+        var visualKey = $"{mode}:{gizmoAxisLengths.X:0.00}:{gizmoAxisLengths.Y:0.00}:{gizmoAxisLengths.Z:0.00}";
+        if (visualKey != gizmoVisualKey)
+        {
+            gizmoVisualKey = visualKey;
+            BuildGizmo();
+        }
+        gizmoRoot.Position = gizmoCenter;
         gizmoRoot.Visible = selectedPart >= 0 && mode != ToolMode.Select && mode != ToolMode.Paint;
         foreach (var child in gizmoRoot.GetChildren())
             if (child is Node3D node)
                 node.Visible = mode == ToolMode.Scale ? node.Name.ToString().StartsWith("Scale") : !node.Name.ToString().StartsWith("Scale");
     }
 
-    private void ManipulateSelectedWithMouse(Vector2 relative)
+    private void ManipulateSelectedWithMouse(Vector2 mousePosition)
     {
-        if (selectedPart < 0 || selectedPart >= map.Objects.Count) return;
-        var delta = new Vector3(relative.X * 0.04f, -relative.Y * 0.04f, relative.X * 0.04f);
+        if (selectedPart < 0 || selectedPart >= map.Objects.Count || activeGizmoAxis == GizmoAxis.None) return;
+        var axis = AxisVector(activeGizmoAxis);
+        var projected = ProjectAxisToScreen(axis);
+        if (projected.LengthSquared() < 0.0001f) return;
+        var screenDelta = mousePosition - gizmoDragStartMouse;
+        var pixels = screenDelta.Dot(projected.Normalized());
+        var worldScale = Mathf.Max(0.02f, 4f / Mathf.Max(36f, projected.Length()));
+        var amount = pixels * worldScale;
+        var rotationAmount = pixels * 0.45f;
         foreach (var index in selectedParts.Count > 0 ? selectedParts : new List<int> { selectedPart })
         {
             if (index < 0 || index >= map.Objects.Count || map.Objects[index].Locked) continue;
             var part = map.Objects[index];
-            if (mode == ToolMode.Move) part.Position = Snap(part.Position + camera.GlobalBasis.X * delta.X + -camera.GlobalBasis.Y * delta.Y);
-            if (mode == ToolMode.Rotate) part.Rotation += new Vector3(relative.Y, relative.X, 0) * 0.25f;
+            if (mode == ToolMode.Move && gizmoDragStartPositions.TryGetValue(index, out var startPosition))
+                part.Position = Snap(startPosition + axis * amount);
+            if (mode == ToolMode.Rotate && gizmoDragStartRotations.TryGetValue(index, out var startRotation))
+                part.Rotation = startRotation + axis * rotationAmount;
             if (mode == ToolMode.Scale)
             {
-                var amount = relative.X * 0.025f;
-                part.Size = new Vector3(Mathf.Max(0.1f, part.Size.X + amount), Mathf.Max(0.1f, part.Size.Y + amount), Mathf.Max(0.1f, part.Size.Z + amount));
+                var startSize = gizmoDragStartSizes.TryGetValue(index, out var savedSize) ? savedSize : part.Size;
+                part.Size = new Vector3(
+                    activeGizmoAxis == GizmoAxis.X ? Mathf.Max(0.1f, startSize.X + amount) : startSize.X,
+                    activeGizmoAxis == GizmoAxis.Y ? Mathf.Max(0.1f, startSize.Y + amount) : startSize.Y,
+                    activeGizmoAxis == GizmoAxis.Z ? Mathf.Max(0.1f, startSize.Z + amount) : startSize.Z
+                );
             }
         }
         dirty = true;
@@ -836,13 +1065,12 @@ public partial class StudioMain : Node3D
         selectionBox = null;
         gizmoRoot.Visible = false;
         if (selectedPart < 0 || selectedPart >= map.Objects.Count) return;
-        var part = map.Objects[selectedPart];
+        var bounds = SelectionBounds();
         selectionBox = new MeshInstance3D
         {
             Name = "SelectionBox",
-            Position = part.Position,
-            RotationDegrees = part.Rotation,
-            Mesh = new BoxMesh { Size = part.Size + new Vector3(0.12f, 0.12f, 0.12f) },
+            Position = bounds.Position + bounds.Size * 0.5f,
+            Mesh = new BoxMesh { Size = bounds.Size + new Vector3(0.12f, 0.12f, 0.12f) },
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = new Color(1f, 0.9f, 0.05f, 0.22f),
@@ -856,6 +1084,143 @@ public partial class StudioMain : Node3D
         AddChild(selectionBox);
         gizmoRoot.Visible = true;
         UpdateGizmo();
+    }
+
+    private List<int> ActiveSelectionIndices()
+    {
+        if (selectedParts.Count > 0) return new List<int>(selectedParts);
+        return selectedPart >= 0 ? new List<int> { selectedPart } : new List<int>();
+    }
+
+    private Aabb SelectionBounds()
+    {
+        var indices = ActiveSelectionIndices();
+        var hasBounds = false;
+        var bounds = new Aabb();
+        foreach (var index in indices)
+        {
+            if (index < 0 || index >= map.Objects.Count) continue;
+            var part = map.Objects[index];
+            var half = new Vector3(Mathf.Max(0.2f, part.Size.X), Mathf.Max(0.2f, part.Size.Y), Mathf.Max(0.2f, part.Size.Z)) * 0.5f;
+            var partBounds = new Aabb(part.Position - half, half * 2f);
+            if (!hasBounds)
+            {
+                bounds = partBounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds = bounds.Expand(partBounds.Position);
+                bounds = bounds.Expand(partBounds.Position + partBounds.Size);
+            }
+        }
+        return hasBounds ? bounds : new Aabb(Vector3.Zero, Vector3.One);
+    }
+
+    private bool TryBeginGizmoDrag(Vector2 screenPosition)
+    {
+        UpdateGizmo();
+        if (!gizmoRoot.Visible) return false;
+        var axis = PickGizmoAxis(screenPosition);
+        if (axis == GizmoAxis.None) return false;
+        PushUndo();
+        activeGizmoAxis = axis;
+        gizmoDragStartMouse = screenPosition;
+        gizmoDragStartPositions.Clear();
+        gizmoDragStartSizes.Clear();
+        gizmoDragStartRotations.Clear();
+        foreach (var index in ActiveSelectionIndices())
+        {
+            if (index < 0 || index >= map.Objects.Count) continue;
+            gizmoDragStartPositions[index] = map.Objects[index].Position;
+            gizmoDragStartSizes[index] = map.Objects[index].Size;
+            gizmoDragStartRotations[index] = map.Objects[index].Rotation;
+        }
+        status.Text = $"{mode} eixo {axis}";
+        return true;
+    }
+
+    private GizmoAxis PickGizmoAxis(Vector2 screenPosition)
+    {
+        var bestAxis = GizmoAxis.None;
+        var bestDistance = 9999f;
+        foreach (var axis in new[] { GizmoAxis.X, GizmoAxis.Y, GizmoAxis.Z })
+        {
+            var distance = DistanceToProjectedAxis(screenPosition, axis);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestAxis = axis;
+            }
+        }
+        return bestDistance <= 24f ? bestAxis : GizmoAxis.None;
+    }
+
+    private float DistanceToProjectedAxis(Vector2 point, GizmoAxis axis)
+    {
+        var start = camera.UnprojectPosition(gizmoCenter);
+        var end = camera.UnprojectPosition(gizmoCenter + AxisVector(axis) * gizmoAxisLengths[(int)axis - 1]);
+        var segment = end - start;
+        var lengthSq = segment.LengthSquared();
+        if (lengthSq < 0.001f) return 9999f;
+        var t = Mathf.Clamp((point - start).Dot(segment) / lengthSq, 0f, 1f);
+        return point.DistanceTo(start + segment * t);
+    }
+
+    private Vector2 ProjectAxisToScreen(Vector3 axis)
+    {
+        var start = camera.UnprojectPosition(gizmoCenter);
+        var end = camera.UnprojectPosition(gizmoCenter + axis * 4f);
+        return end - start;
+    }
+
+    private static Vector3 AxisVector(GizmoAxis axis)
+    {
+        return axis switch
+        {
+            GizmoAxis.X => Vector3.Right,
+            GizmoAxis.Y => Vector3.Up,
+            GizmoAxis.Z => Vector3.Back,
+            _ => Vector3.Zero
+        };
+    }
+
+    private static NovusMap CreateBlankProject()
+    {
+        var next = new NovusMap
+        {
+            Name = "Novo Mundo",
+            Description = "Criado no Novus Worlds Studio.",
+            SkyColor = new Color(0.53f, 0.81f, 0.92f),
+            Spawn = new Vector3(0, 4, 0),
+            MaxPlayers = 20
+        };
+        next.Objects.Add(new NovusPart
+        {
+            Id = "baseplate",
+            Type = "Part",
+            Name = "Baseplate",
+            Position = new Vector3(0, -0.5f, 0),
+            Size = new Vector3(128, 1, 128),
+            Color = new Color(0.34f, 0.66f, 0.32f),
+            Material = "Grass",
+            Anchored = true,
+            CanCollide = true
+        });
+        next.Objects.Add(new NovusPart
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Type = "SpawnPoint",
+            Name = "SpawnPoint",
+            Position = new Vector3(0, 0.25f, 0),
+            Size = new Vector3(6, 0.5f, 6),
+            Color = new Color(0.1f, 0.9f, 0.25f),
+            Material = "Neon",
+            Anchored = true,
+            CanCollide = true
+        });
+        next.Scripts.Add(DefaultScript());
+        return next;
     }
 
     private void AddPart(string type)
@@ -1170,7 +1535,7 @@ public partial class StudioMain : Node3D
         try
         {
             var image = GetViewport().GetTexture().GetImage();
-            image.Resize(512, 256, Image.Interpolation.Nearest);
+            image.Resize(320, 160, Image.Interpolation.Nearest);
             var png = image.SavePngToBuffer();
             return "data:image/png;base64," + Convert.ToBase64String(png);
         }

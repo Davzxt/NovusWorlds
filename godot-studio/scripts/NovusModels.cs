@@ -44,3 +44,12 @@ public sealed class NovusScript
     public string Source = "print(\"Hello from Novus Luau\")";
     public bool Disabled;
 }
+
+public sealed class StudioGameSummary
+{
+    public int Id;
+    public string Title = "Sem nome";
+    public string Description = "";
+    public string UpdatedAt = "";
+    public bool IsActive;
+}
