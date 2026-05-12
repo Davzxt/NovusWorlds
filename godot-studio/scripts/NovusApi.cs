@@ -37,6 +37,8 @@ public static class NovusApi
         var parsed = ParseMap(mapJson, root.TryGetProperty("title", out var title) ? title.GetString() ?? "Novo Mundo" : "Novo Mundo");
         parsed.GameId = root.TryGetProperty("gameId", out var gameId) && gameId.TryGetInt32(out var id) ? id : 0;
         parsed.Description = root.TryGetProperty("description", out var description) ? description.GetString() ?? "" : "";
+        parsed.ThumbnailUrl = root.TryGetProperty("thumbnail_url", out var thumbnail) ? thumbnail.GetString() ?? "" : "";
+        if (root.TryGetProperty("maxPlayers", out var maxPlayers) && maxPlayers.TryGetInt32(out var max)) parsed.MaxPlayers = Math.Clamp(max, 1, 20);
         return parsed;
     }
 
@@ -51,6 +53,8 @@ public static class NovusApi
             ["title"] = map.Name,
             ["description"] = map.Description,
             ["publish"] = publish,
+            ["maxPlayers"] = map.MaxPlayers,
+            ["thumbnail_url"] = map.ThumbnailUrl,
             ["map_data"] = ToWireMap(map)
         });
         var err = http.Request(
@@ -88,6 +92,7 @@ public static class NovusApi
     {
         var map = new NovusMap { Name = title };
         if (mapJson.TryGetProperty("name", out var name)) map.Name = name.GetString() ?? title;
+        if (mapJson.TryGetProperty("maxPlayers", out var maxPlayers) && maxPlayers.TryGetInt32(out var max)) map.MaxPlayers = Math.Clamp(max, 1, 20);
         if (mapJson.TryGetProperty("skyColor", out var sky)) map.SkyColor = ParseColor(sky.GetString(), map.SkyColor);
         if (mapJson.TryGetProperty("spawnPoints", out var spawns) && spawns.ValueKind == JsonValueKind.Array && spawns.GetArrayLength() > 0)
         {
@@ -109,8 +114,12 @@ public static class NovusApi
                     Anchored = GetBool(obj, "anchored", true),
                     CanCollide = GetBool(obj, "canCollide", true),
                     Locked = GetBool(obj, "locked", false),
+                    Visible = GetBool(obj, "visible", true),
+                    CastShadow = GetBool(obj, "castShadow", true),
                     Transparency = GetFloat(obj, "transparency", 0),
-                    Reflectance = GetFloat(obj, "reflectance", 0)
+                    Reflectance = GetFloat(obj, "reflectance", 0),
+                    Brightness = GetFloat(obj, "brightness", 1.2f),
+                    Range = GetFloat(obj, "range", 18f)
                 };
                 if (obj.TryGetProperty("position", out var pos)) part.Position = new Vector3(GetFloat(pos, "x", 0), GetFloat(pos, "y", 0), GetFloat(pos, "z", 0));
                 if (obj.TryGetProperty("rotation", out var rot)) part.Rotation = new Vector3(GetFloat(rot, "x", 0), GetFloat(rot, "y", 0), GetFloat(rot, "z", 0));
@@ -172,8 +181,12 @@ public static class NovusApi
                 ["anchored"] = part.Anchored,
                 ["canCollide"] = part.CanCollide,
                 ["locked"] = part.Locked,
+                ["visible"] = part.Visible,
+                ["castShadow"] = part.CastShadow,
                 ["transparency"] = part.Transparency,
                 ["reflectance"] = part.Reflectance,
+                ["brightness"] = part.Brightness,
+                ["range"] = part.Range,
                 ["children"] = Array.Empty<object>()
             });
         }
@@ -196,6 +209,7 @@ public static class NovusApi
             ["objects"] = objects,
             ["scripts"] = scripts,
             ["spawnPoints"] = new object[] { new Dictionary<string, object> { ["x"] = map.Spawn.X, ["y"] = map.Spawn.Y, ["z"] = map.Spawn.Z } },
+            ["maxPlayers"] = map.MaxPlayers,
             ["ambient"] = "#404040",
             ["skyColor"] = ToHex(map.SkyColor)
         };

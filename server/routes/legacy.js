@@ -204,6 +204,8 @@ router.get('/studio-project', (req, res) => {
     gameId: entry.gameId || null,
     title: game?.title || 'Novo Mundo',
     description: game?.description || '',
+    thumbnail_url: game?.thumbnail_url || '',
+    maxPlayers: game?.max_players || 20,
     map: game ? parseJson(game.map_data, {}) : {
       name: 'Novo Mundo',
       version: 1,
@@ -224,6 +226,8 @@ router.post('/studio-project/save', (req, res) => {
   const title = String(req.body.title || 'Novo Mundo').trim().slice(0, 80) || 'Novo Mundo';
   const description = String(req.body.description || '').trim().slice(0, 500);
   const publish = req.body.publish === true || req.body.publish === 'true';
+  const maxPlayers = Math.max(1, Math.min(20, Number(req.body.maxPlayers || req.body.max_players || 20)));
+  const thumbnailUrl = String(req.body.thumbnail_url || req.body.thumbnailUrl || '').slice(0, 2_000_000);
   const incomingId = Number(req.body.gameId || entry.gameId || 0);
   const map = req.body.map_data && typeof req.body.map_data === 'object' ? req.body.map_data : {
     name: title,
@@ -244,14 +248,14 @@ router.post('/studio-project/save', (req, res) => {
     if (game.creator_id !== entry.userId) return res.status(403).json({ error: 'Sem permissao.' });
     db.prepare(`
       UPDATE games
-      SET title = ?, description = ?, map_data = ?, is_active = CASE WHEN ? THEN 1 ELSE is_active END, updated_at = CURRENT_TIMESTAMP
+      SET title = ?, description = ?, map_data = ?, thumbnail_url = COALESCE(NULLIF(?, ''), thumbnail_url), max_players = ?, is_active = CASE WHEN ? THEN 1 ELSE is_active END, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(title, description, mapJson, publish ? 1 : 0, id);
+    `).run(title, description, mapJson, thumbnailUrl, maxPlayers, publish ? 1 : 0, id);
   } else {
     const info = db.prepare(`
-      INSERT INTO games (title, description, creator_id, map_data, thumbnail_url, is_active)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(title, description, entry.userId, mapJson, '/assets/textures/game-default.svg', publish ? 1 : 0);
+      INSERT INTO games (title, description, creator_id, map_data, thumbnail_url, is_active, max_players)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(title, description, entry.userId, mapJson, thumbnailUrl || '/assets/textures/game-default.svg', publish ? 1 : 0, maxPlayers);
     id = info.lastInsertRowid;
     entry.gameId = id;
   }

@@ -6,10 +6,12 @@ public sealed class NovusMap
     public int GameId;
     public string Name = "Novus Place";
     public string Description = "";
+    public string ThumbnailUrl = "";
     public readonly List<NovusPart> Objects = new();
     public readonly List<NovusScript> Scripts = new();
     public Vector3 Spawn = new(0, 4, 0);
     public Color SkyColor = new(0.53f, 0.81f, 0.92f);
+    public int MaxPlayers = 20;
 }
 
 public sealed class NovusPart
@@ -26,8 +28,12 @@ public sealed class NovusPart
     public bool Anchored = true;
     public bool CanCollide = true;
     public bool Locked;
+    public bool Visible = true;
+    public bool CastShadow = true;
     public float Transparency;
     public float Reflectance;
+    public float Brightness = 1.2f;
+    public float Range = 18f;
 }
 
 public sealed class NovusScript
