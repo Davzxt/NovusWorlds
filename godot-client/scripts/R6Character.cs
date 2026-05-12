@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 public partial class R6Character : CharacterBody3D
 {
     [Export] public float WalkSpeed = 5.8f;
-    [Export] public float JumpVelocity = 7.35f;
+    [Export] public float JumpVelocity = 8.15f;
     [Export] public bool IsRemote;
 
     public Vector2 MobileMove { get; set; }
@@ -134,7 +134,7 @@ public partial class R6Character : CharacterBody3D
     {
         var clean = (message ?? "").Trim();
         if (clean.Length == 0) return;
-        var bubbleText = clean.Length > 58 ? clean[..58] : clean;
+        var bubbleText = clean.Length > 120 ? clean[..120] : clean;
         bubbleMessages.Insert(0, bubbleText);
         while (bubbleMessages.Count > 3) bubbleMessages.RemoveAt(bubbleMessages.Count - 1);
         UpdateBubbleLabels();
@@ -241,29 +241,31 @@ public partial class R6Character : CharacterBody3D
     private static LocalR6Sources CollectLocalR6Sources(Node3D imported)
     {
         var sources = new LocalR6Sources();
-        foreach (var child in imported.GetChildren())
+        var meshes = new List<(MeshInstance3D Mesh, Vector3 Position)>();
+        CollectMeshInstances(imported, Transform3D.Identity, meshes);
+        foreach (var entry in meshes)
         {
-            if (child is not Node3D node) continue;
-            var mesh = FindFirstMesh(node);
-            if (mesh?.Mesh == null) continue;
-            var pos = node.Position;
-            if (node.Name.ToString().ToLowerInvariant().Contains("pyramid") || pos.Y > 1.9f)
+            var mesh = entry.Mesh;
+            if (mesh.Mesh == null) continue;
+            var name = mesh.Name.ToString().ToLowerInvariant();
+            var pos = entry.Position;
+            if (name.Contains("head") || name.Contains("pyramid") || pos.Y > 1.8f)
             {
                 sources.Head = mesh.Mesh;
             }
-            else if (pos.Y > 0.9f && Mathf.Abs(pos.X) < 0.35f)
+            else if ((name.Contains("torso") || name.Contains("body")) || (pos.Y > 0.75f && Mathf.Abs(pos.X) < 0.35f))
             {
                 sources.Torso = mesh.Mesh;
             }
-            else if (pos.Y > 0.9f && pos.X < 0)
+            else if ((name.Contains("left") && name.Contains("arm")) || (pos.Y > 0.75f && pos.X < 0))
             {
                 sources.LeftArm = mesh.Mesh;
             }
-            else if (pos.Y > 0.9f)
+            else if ((name.Contains("right") && name.Contains("arm")) || pos.Y > 0.75f)
             {
                 sources.RightArm = mesh.Mesh;
             }
-            else if (pos.X < 0)
+            else if ((name.Contains("left") && name.Contains("leg")) || pos.X < 0)
             {
                 sources.LeftLeg = mesh.Mesh;
             }
@@ -275,15 +277,13 @@ public partial class R6Character : CharacterBody3D
         return sources;
     }
 
-    private static MeshInstance3D? FindFirstMesh(Node node)
+    private static void CollectMeshInstances(Node node, Transform3D parentTransform, List<(MeshInstance3D Mesh, Vector3 Position)> meshes)
     {
-        if (node is MeshInstance3D mesh) return mesh;
+        var transform = parentTransform;
+        if (node is Node3D node3D) transform = parentTransform * node3D.Transform;
+        if (node is MeshInstance3D mesh) meshes.Add((mesh, transform.Origin));
         foreach (var child in node.GetChildren())
-        {
-            var found = FindFirstMesh(child);
-            if (found != null) return found;
-        }
-        return null;
+            CollectMeshInstances(child, transform, meshes);
     }
 
     private static void AddPyramidHead(Node root, Vector3 pivotPos, Color color)
@@ -351,6 +351,7 @@ public partial class R6Character : CharacterBody3D
         TintPart("LeftLeg", avatar.LegsColor);
         TintPart("RightLeg", avatar.LegsColor);
         ApplyFace();
+        RemoveExistingHats();
         foreach (var item in avatar.Items)
             if (item.Type == "hat") AddHatMarker(item);
     }
@@ -395,7 +396,7 @@ public partial class R6Character : CharacterBody3D
             var back = new MeshInstance3D
             {
                 Name = "BubbleBack",
-                Mesh = new QuadMesh { Size = new Vector2(2.1f, 0.44f) },
+                Mesh = new QuadMesh { Size = new Vector2(2.1f, 0.54f) },
                 MaterialOverride = backMaterial
             };
             var label = new Label3D
@@ -403,7 +404,7 @@ public partial class R6Character : CharacterBody3D
                 Name = "BubbleText",
                 Text = "",
                 Position = new Vector3(0, -0.015f, -0.01f),
-                PixelSize = 0.0145f,
+                PixelSize = 0.014f,
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
                 Modulate = Colors.Black,
                 OutlineModulate = new Color(1, 1, 1, 0.15f),
@@ -535,7 +536,10 @@ public partial class R6Character : CharacterBody3D
                 err = image.LoadPngFromBuffer(bytes);
                 if (err != Error.Ok) err = image.LoadJpgFromBuffer(bytes);
             }
-            if (err != Error.Ok) return;
+            if (err != Error.Ok)
+            {
+                return;
+            }
             var texture = ImageTexture.CreateFromImage(image);
             var plane = EnsureFaceTexturePlane();
             plane.Visible = true;
@@ -638,6 +642,7 @@ public partial class R6Character : CharacterBody3D
             Scale = item.HatScale
         };
         hat.MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.08f), Roughness = 0.55f };
+        hat.Visible = string.IsNullOrWhiteSpace(item.ModelUrl);
         visual.AddChild(hat);
         _ = TryReplaceHatWithModel(item, hat);
     }
@@ -650,14 +655,30 @@ public partial class R6Character : CharacterBody3D
             var http = new HttpRequest();
             AddChild(http);
             var err = http.Request(item.ModelUrl);
-            if (err != Error.Ok) return;
+            if (err != Error.Ok)
+            {
+                fallback.QueueFree();
+                return;
+            }
             var result = await WaitForHttp(http);
-            if (result.ResponseCode >= 400 || result.Body.Length == 0) return;
+            if (result.ResponseCode >= 400 || result.Body.Length == 0)
+            {
+                fallback.QueueFree();
+                return;
+            }
             var state = new GltfState();
             var document = new GltfDocument();
             var hint = item.ModelUrl.EndsWith(".glb", System.StringComparison.OrdinalIgnoreCase) ? "novus_hat.glb" : "novus_hat.gltf";
-            if (document.AppendFromBuffer(result.Body, hint, state) != Error.Ok) return;
-            if (document.GenerateScene(state) is not Node3D model) return;
+            if (document.AppendFromBuffer(result.Body, hint, state) != Error.Ok)
+            {
+                fallback.QueueFree();
+                return;
+            }
+            if (document.GenerateScene(state) is not Node3D model)
+            {
+                fallback.QueueFree();
+                return;
+            }
             model.Name = fallback.Name;
             model.Position = fallback.Position;
             model.RotationDegrees = item.HatRotation;
@@ -668,6 +689,7 @@ public partial class R6Character : CharacterBody3D
         }
         catch (System.Exception ex)
         {
+            if (IsInstanceValid(fallback)) fallback.QueueFree();
             GD.PushWarning($"Hat model fallback for {item.Name}: {ex.Message}");
         }
     }
@@ -762,10 +784,64 @@ public partial class R6Character : CharacterBody3D
             var hasMessage = i < bubbleMessages.Count;
             var message = hasMessage ? bubbleMessages[i] : "";
             bubbles[i].Root.Visible = hasMessage && !localVisualHidden;
-            bubbles[i].Label.Text = message;
+            var wrapped = WrapBubbleText(message);
+            bubbles[i].Label.Text = wrapped;
+            var lines = string.IsNullOrWhiteSpace(wrapped) ? 1 : wrapped.Split('\n').Length;
+            var longest = LongestLineLength(wrapped);
+            var width = Mathf.Clamp(1.1f + longest * 0.07f, 1.8f, 4.8f);
+            var height = Mathf.Clamp(0.44f + (lines - 1) * 0.28f, 0.54f, 1.18f);
+            bubbles[i].Root.Position = new Vector3(0, 5.45f + i * (height + 0.14f), 0);
             if (bubbles[i].Back.Mesh is QuadMesh quad)
-                quad.Size = new Vector2(Mathf.Clamp(1.2f + message.Length * 0.065f, 1.85f, 4.35f), 0.44f);
+                quad.Size = new Vector2(width, height);
         }
+    }
+
+    private void RemoveExistingHats()
+    {
+        foreach (var child in visual.GetChildren())
+            if (child is Node node && node.Name.ToString().StartsWith("NovusHat_", StringComparison.Ordinal))
+                node.QueueFree();
+    }
+
+    private static string WrapBubbleText(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return "";
+        const int maxLine = 28;
+        var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var lines = new List<string>();
+        var current = "";
+        foreach (var rawWord in words)
+        {
+            var word = rawWord;
+            while (word.Length > maxLine)
+            {
+                var part = word[..maxLine];
+                word = word[maxLine..];
+                if (!string.IsNullOrEmpty(current))
+                {
+                    lines.Add(current);
+                    current = "";
+                }
+                lines.Add(part);
+            }
+            if (string.IsNullOrEmpty(current)) current = word;
+            else if (current.Length + 1 + word.Length <= maxLine) current += " " + word;
+            else
+            {
+                lines.Add(current);
+                current = word;
+            }
+            if (lines.Count >= 3) break;
+        }
+        if (!string.IsNullOrEmpty(current) && lines.Count < 3) lines.Add(current);
+        return string.Join("\n", lines);
+    }
+
+    private static int LongestLineLength(string value)
+    {
+        var longest = 0;
+        foreach (var line in value.Split('\n')) longest = Math.Max(longest, line.Length);
+        return longest;
     }
 
     private void UpdateFootsteps(bool walking)
