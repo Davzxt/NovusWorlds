@@ -9,11 +9,14 @@ public static class NovusApi
 {
     public static async Task<NovusMap> LoadPlace(string baseUrl, string gameId)
     {
+        baseUrl = NormalizeBaseUrl(baseUrl);
         var http = new HttpRequest();
+        http.MaxRedirects = 8;
         AddChildTemp(http);
         var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/place/{Uri.EscapeDataString(gameId)}");
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
+        ThrowIfRedirect(result, "carregar jogo");
         if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}");
         var json = result.Body.GetStringFromUtf8();
         using var doc = JsonDocument.Parse(json);
@@ -24,13 +27,16 @@ public static class NovusApi
 
     public static async Task<NovusMap> LoadStudioProject(string baseUrl, string ticket, int requestedGameId = 0)
     {
+        baseUrl = NormalizeBaseUrl(baseUrl);
         var http = new HttpRequest();
+        http.MaxRedirects = 8;
         AddChildTemp(http);
         var url = $"{baseUrl.TrimEnd('/')}/api/legacy/studio-project?ticket={Uri.EscapeDataString(ticket)}";
         if (requestedGameId > 0) url += $"&gameId={requestedGameId}";
         var err = http.Request(url);
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
+        ThrowIfRedirect(result, "abrir projeto");
         if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}");
         var json = result.Body.GetStringFromUtf8();
         using var doc = JsonDocument.Parse(json);
@@ -46,11 +52,14 @@ public static class NovusApi
 
     public static async Task<List<StudioGameSummary>> LoadStudioGames(string baseUrl, string ticket)
     {
+        baseUrl = NormalizeBaseUrl(baseUrl);
         var http = new HttpRequest();
+        http.MaxRedirects = 8;
         AddChildTemp(http);
         var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/studio-games?ticket={Uri.EscapeDataString(ticket)}");
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
+        ThrowIfRedirect(result, "listar projetos");
         if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}: {ShortBody(result.Body)}");
         var games = new List<StudioGameSummary>();
         using var doc = JsonDocument.Parse(result.Body.GetStringFromUtf8());
@@ -71,7 +80,9 @@ public static class NovusApi
 
     public static async Task<int> SaveStudioProject(string baseUrl, string ticket, NovusMap map, bool publish)
     {
+        baseUrl = NormalizeBaseUrl(baseUrl);
         var http = new HttpRequest();
+        http.MaxRedirects = 8;
         AddChildTemp(http);
         var body = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
@@ -93,9 +104,10 @@ public static class NovusApi
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
         var responseText = result.Body.GetStringFromUtf8();
-        if (string.IsNullOrWhiteSpace(responseText))
-            throw new Exception($"Servidor respondeu vazio em /api/legacy/studio-project/save (HTTP {result.ResponseCode}). Isso normalmente indica erro no deploy/Render ou rota antiga ainda rodando.");
+        ThrowIfRedirect(result, "salvar projeto");
         if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}: {ShortBody(result.Body)}");
+        if (string.IsNullOrWhiteSpace(responseText))
+            throw new Exception($"Servidor respondeu vazio em /api/legacy/studio-project/save (HTTP {result.ResponseCode}). Verifique se o deploy do Render terminou e se a URL do Studio esta em HTTPS.");
         if (responseText.TrimStart().StartsWith("<"))
             throw new Exception($"Servidor retornou HTML em vez de JSON (HTTP {result.ResponseCode}). Resposta: {ShortText(responseText)}");
         try
@@ -122,9 +134,37 @@ public static class NovusApi
         {
             http.QueueFree();
             if (result != (long)HttpRequest.Result.Success) tcs.TrySetException(new Exception($"HTTP result {result}"));
-            else tcs.TrySetResult(new HttpResponse { ResponseCode = responseCode, Body = body });
+            else tcs.TrySetResult(new HttpResponse { ResponseCode = responseCode, Headers = headers, Body = body });
         };
         return tcs.Task;
+    }
+
+    private static string NormalizeBaseUrl(string baseUrl)
+    {
+        baseUrl = string.IsNullOrWhiteSpace(baseUrl) ? "http://localhost:3000" : baseUrl.Trim();
+        if (baseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            baseUrl.Contains(".onrender.com", StringComparison.OrdinalIgnoreCase))
+            return "https://" + baseUrl["http://".Length..];
+        return baseUrl;
+    }
+
+    private static void ThrowIfRedirect(HttpResponse result, string action)
+    {
+        if (result.ResponseCode < 300 || result.ResponseCode >= 400) return;
+        var location = HeaderValue(result.Headers, "location");
+        var suffix = string.IsNullOrWhiteSpace(location) ? "" : $" Destino: {location}";
+        throw new Exception($"Servidor redirecionou ao {action} (HTTP {result.ResponseCode}). Use a URL HTTPS do Render no launcher/studio.{suffix}");
+    }
+
+    private static string HeaderValue(string[] headers, string key)
+    {
+        foreach (var header in headers)
+        {
+            var idx = header.IndexOf(':');
+            if (idx <= 0) continue;
+            if (header[..idx].Equals(key, StringComparison.OrdinalIgnoreCase)) return header[(idx + 1)..].Trim();
+        }
+        return "";
     }
 
     private static string ShortBody(byte[] body) => ShortText(body.GetStringFromUtf8());
@@ -283,6 +323,7 @@ public static class NovusApi
     private sealed class HttpResponse
     {
         public long ResponseCode;
+        public string[] Headers = Array.Empty<string>();
         public byte[] Body = Array.Empty<byte>();
     }
 }

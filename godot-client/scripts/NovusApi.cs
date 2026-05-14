@@ -9,7 +9,9 @@ public static class NovusApi
     public static async Task<NovusAvatar> LoadAvatar(string baseUrl, string ticket)
     {
         if (string.IsNullOrWhiteSpace(ticket)) return new NovusAvatar();
+        baseUrl = NormalizeBaseUrl(baseUrl);
         var http = new HttpRequest();
+        http.MaxRedirects = 8;
         await AddChildTemp(http);
         var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/avatar?ticket={Uri.EscapeDataString(ticket)}");
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
@@ -21,7 +23,9 @@ public static class NovusApi
 
     public static async Task<NovusMap> LoadPlace(string baseUrl, string gameId, string ticket = "")
     {
+        baseUrl = NormalizeBaseUrl(baseUrl);
         var http = new HttpRequest();
+        http.MaxRedirects = 8;
         await AddChildTemp(http);
         var url = $"{baseUrl.TrimEnd('/')}/api/legacy/place/{Uri.EscapeDataString(gameId)}";
         if (!string.IsNullOrWhiteSpace(ticket)) url += $"?ticket={Uri.EscapeDataString(ticket)}";
@@ -38,7 +42,9 @@ public static class NovusApi
 
     public static async Task<NovusMap> LoadStudioProject(string baseUrl, string ticket)
     {
+        baseUrl = NormalizeBaseUrl(baseUrl);
         var http = new HttpRequest();
+        http.MaxRedirects = 8;
         await AddChildTemp(http);
         var err = http.Request($"{baseUrl.TrimEnd('/')}/api/legacy/studio-project?ticket={Uri.EscapeDataString(ticket)}");
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
@@ -57,6 +63,15 @@ public static class NovusApi
         if (tree?.Root == null) return;
         tree.Root.CallDeferred(Node.MethodName.AddChild, node);
         await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+    }
+
+    private static string NormalizeBaseUrl(string baseUrl)
+    {
+        baseUrl = string.IsNullOrWhiteSpace(baseUrl) ? "http://localhost:3000" : baseUrl.Trim();
+        if (baseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            baseUrl.Contains(".onrender.com", StringComparison.OrdinalIgnoreCase))
+            return "https://" + baseUrl["http://".Length..];
+        return baseUrl;
     }
 
     private static Task<HttpResponse> WaitForRequest(HttpRequest http)

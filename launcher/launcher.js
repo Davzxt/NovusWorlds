@@ -36,7 +36,7 @@ async function main() {
 
 async function joinGame() {
   const ticket = need('ticket');
-  const baseUrl = need('baseUrl');
+  const baseUrl = normalizeBaseUrl(need('baseUrl'));
   const gameId = need('gameId');
   const serverHost = uri.searchParams.get('server') || config.godotServerHost || '127.0.0.1';
   const serverPort = uri.searchParams.get('port') || config.godotServerPort || 53640;
@@ -57,7 +57,7 @@ async function joinGame() {
 
 async function openStudio() {
   const ticket = need('ticket');
-  const baseUrl = need('baseUrl');
+  const baseUrl = normalizeBaseUrl(need('baseUrl'));
   const project = await json(`${baseUrl}/api/legacy/studio-project?ticket=${encodeURIComponent(ticket)}`);
   const projectPath = write(`studio-project-${project.gameId || 'new'}.json`, JSON.stringify(project, null, 2));
   const target = resolveExecutable(config.studioExe, 'studio');
@@ -130,6 +130,12 @@ function need(key) {
   const value = uri.searchParams.get(key);
   if (!value) throw new Error(`Missing ${key}`);
   return value;
+}
+
+function normalizeBaseUrl(value) {
+  const url = String(value || '').trim();
+  if (/^http:\/\/[^/]+\.onrender\.com/i.test(url)) return url.replace(/^http:\/\//i, 'https://');
+  return url;
 }
 
 function safe(name) {

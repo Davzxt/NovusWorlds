@@ -7,7 +7,9 @@ const tickets = new Map();
 const TICKET_TTL_MS = 30 * 60 * 1000;
 
 function baseUrl(req) {
-  return `${req.protocol}://${req.get('host')}`;
+  const forwardedProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const proto = forwardedProto || req.protocol;
+  return `${proto}://${req.get('host')}`;
 }
 
 function gameServerHost(req) {

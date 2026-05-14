@@ -33,6 +33,7 @@ public partial class StudioMain : Node3D
     private OptionButton snapStepSelect = null!;
     private CheckBox wireframeToggle = null!;
     private ColorPickerButton paintPicker = null!;
+    private Button runButton = null!;
     private PopupMenu explorerMenu = null!;
     private ConfirmationDialog publishDialog = null!;
     private LineEdit publishName = null!;
@@ -81,6 +82,11 @@ public partial class StudioMain : Node3D
     private Vector3 gizmoAxisLengths = new(3f, 3f, 3f);
     private GizmoAxis activeGizmoAxis = GizmoAxis.None;
     private string gizmoVisualKey = "";
+    private bool studioPlayMode;
+    private string studioPlaySnapshot = "";
+    private CharacterBody3D? studioPlayer;
+    private Node3D? studioPlayerVisual;
+    private Vector3 studioPlayerVelocity;
 
     public override async void _Ready()
     {
@@ -123,6 +129,7 @@ public partial class StudioMain : Node3D
             lastMousePosition = mouse.Position;
             if (mouse.ButtonIndex == MouseButton.Right) cameraRotating = mouse.Pressed;
             if (mouse.ButtonIndex == MouseButton.Middle) panningCamera = mouse.Pressed;
+            if (studioPlayMode && mouse.ButtonIndex == MouseButton.Left) return;
             if (mouse.ButtonIndex == MouseButton.Left && !IsPointerOverUi(mouse.Position))
             {
                 if (mouse.Pressed)
@@ -168,6 +175,11 @@ public partial class StudioMain : Node3D
         }
         else if (ev is InputEventKey key && key.Pressed)
         {
+            if (studioPlayMode)
+            {
+                if (key.Keycode == Key.Escape) StopStudioPlay();
+                return;
+            }
             if (scriptEditor?.HasFocus() == true) return;
             if (key.Keycode == Key.Delete) DeleteSelected();
             if (key.Keycode == Key.Escape) ClearSelection();
@@ -193,15 +205,19 @@ public partial class StudioMain : Node3D
 
     public override void _Process(double delta)
     {
-        var speed = Input.IsKeyPressed(Key.Shift) ? 42f : 18f;
-        var move = Vector3.Zero;
-        if (Input.IsKeyPressed(Key.W)) move.Z -= 1;
-        if (Input.IsKeyPressed(Key.S)) move.Z += 1;
-        if (Input.IsKeyPressed(Key.A)) move.X -= 1;
-        if (Input.IsKeyPressed(Key.D)) move.X += 1;
-        if (Input.IsKeyPressed(Key.E)) move.Y += 1;
-        if (Input.IsKeyPressed(Key.Q)) move.Y -= 1;
-        if (move != Vector3.Zero) camera.Position += camera.Basis * move.Normalized() * speed * (float)delta;
+        if (studioPlayMode) UpdateStudioPlay(delta);
+        else
+        {
+            var speed = Input.IsKeyPressed(Key.Shift) ? 42f : 18f;
+            var move = Vector3.Zero;
+            if (Input.IsKeyPressed(Key.W)) move.Z -= 1;
+            if (Input.IsKeyPressed(Key.S)) move.Z += 1;
+            if (Input.IsKeyPressed(Key.A)) move.X -= 1;
+            if (Input.IsKeyPressed(Key.D)) move.X += 1;
+            if (Input.IsKeyPressed(Key.E)) move.Y += 1;
+            if (Input.IsKeyPressed(Key.Q)) move.Y -= 1;
+            if (move != Vector3.Zero) camera.Position += camera.Basis * move.Normalized() * speed * (float)delta;
+        }
         if (rootUi != null) LayoutUi();
         UpdateGizmo();
         fpsFrames++;
@@ -247,12 +263,18 @@ public partial class StudioMain : Node3D
         rootUi.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         ui.AddChild(rootUi);
 
-        toolbarPanel = Panel(new Vector2(0, 0), new Vector2(1366, 42), new Color(0.09f, 0.15f, 0.23f, 0.98f));
+        toolbarPanel = Panel(new Vector2(0, 0), new Vector2(1366, 64), new Color(0.73f, 0.78f, 0.82f, 0.99f));
         rootUi.AddChild(toolbarPanel);
-        var top = new HBoxContainer { Position = new Vector2(6, 5), Size = new Vector2(1340, 32) };
-        toolbarPanel.AddChild(top);
-        titleLabel = new Label { Text = $"Novus Worlds Studio - {map.Name}", CustomMinimumSize = new Vector2(235, 24), Modulate = Colors.White };
-        top.AddChild(titleLabel);
+        var bars = new VBoxContainer { Position = new Vector2(6, 3), Size = new Vector2(1340, 58) };
+        toolbarPanel.AddChild(bars);
+        var menu = new HBoxContainer { CustomMinimumSize = new Vector2(1340, 24) };
+        bars.AddChild(menu);
+        titleLabel = new Label { Text = $"Novus Worlds Studio - {map.Name}", CustomMinimumSize = new Vector2(250, 22), Modulate = new Color(0.02f, 0.05f, 0.08f) };
+        menu.AddChild(titleLabel);
+        foreach (var label in new[] { "File", "Edit", "View", "Insert", "Tools", "Window", "Help" })
+            AddMenuButton(menu, label);
+        var top = new HBoxContainer { CustomMinimumSize = new Vector2(1340, 30) };
+        bars.AddChild(top);
         AddToolButton(top, "Select", "Selecionar (1)", () => SetMode(ToolMode.Select));
         AddToolButton(top, "Move", "Mover (2)", () => SetMode(ToolMode.Move));
         AddToolButton(top, "Rotate", "Rotacionar (3)", () => SetMode(ToolMode.Rotate));
@@ -278,7 +300,7 @@ public partial class StudioMain : Node3D
         top.AddChild(wireframeToggle);
         paintPicker = new ColorPickerButton { Color = new Color(0.8f, 0.1f, 0.08f), CustomMinimumSize = new Vector2(38, 24), TooltipText = "Cor da ferramenta Pintar" };
         top.AddChild(paintPicker);
-        AddToolButton(top, "Run", "Executar script local", RunLuauPreview);
+        runButton = AddToolButton(top, "Run", "Rodar o jogo dentro do Studio", ToggleStudioPlay);
         AddToolButton(top, "Save", "Salvar (Ctrl+S)", () => SaveProject(false));
         AddToolButton(top, "Publish", "Publicar jogo", OpenPublishDialog);
         AddToolButton(top, "Test Private", "Salvar rascunho e testar no client sem publicar", TestGame);
@@ -296,14 +318,14 @@ public partial class StudioMain : Node3D
         explorer.GuiInput += OnExplorerGuiInput;
         rootUi.AddChild(explorer);
 
-        propertiesPanel = Panel(new Vector2(1046, 338), new Vector2(326, 320), new Color(0.12f, 0.19f, 0.28f, 0.98f));
+        propertiesPanel = Panel(new Vector2(1046, 338), new Vector2(326, 320), new Color(0.79f, 0.85f, 0.9f, 0.98f));
         rootUi.AddChild(propertiesPanel);
         propertiesScroll = new ScrollContainer { Position = new Vector2(8, 8), Size = new Vector2(310, 304) };
         propertiesPanel.AddChild(propertiesScroll);
         properties = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         propertiesScroll.AddChild(properties);
 
-        scriptPanel = Panel(new Vector2(240, 500), new Vector2(796, 170), new Color(0.05f, 0.08f, 0.13f, 0.97f));
+        scriptPanel = Panel(new Vector2(240, 500), new Vector2(796, 170), new Color(0.11f, 0.14f, 0.17f, 0.98f));
         rootUi.AddChild(scriptPanel);
         scriptEditor = new TextEdit
         {
@@ -320,15 +342,15 @@ public partial class StudioMain : Node3D
             if (selectedScript >= 0 && selectedScript < map.Scripts.Count) map.Scripts[selectedScript].Source = scriptEditor.Text;
         };
 
-        outputPanel = Panel(new Vector2(240, 684), new Vector2(796, 76), new Color(0.02f, 0.03f, 0.045f, 0.96f));
+        outputPanel = Panel(new Vector2(240, 684), new Vector2(796, 76), new Color(0.78f, 0.84f, 0.88f, 0.98f));
         rootUi.AddChild(outputPanel);
-        output = new RichTextLabel { Position = new Vector2(8, 6), Size = new Vector2(796, 46), BbcodeEnabled = false, ScrollActive = true, Modulate = new Color(0.75f, 1f, 0.75f) };
+        output = new RichTextLabel { Position = new Vector2(8, 6), Size = new Vector2(796, 46), BbcodeEnabled = false, ScrollActive = true, Modulate = new Color(0.03f, 0.09f, 0.04f) };
         outputPanel.AddChild(output);
-        status = new Label { Text = "Novus Studio ready", Position = new Vector2(8, 52), Modulate = Colors.White };
+        status = new Label { Text = "Novus Studio ready", Position = new Vector2(8, 52), Modulate = new Color(0.02f, 0.04f, 0.06f) };
         outputPanel.AddChild(status);
-        objectCountLabel = new Label { Text = "0 objetos | 0 selecionados", Position = new Vector2(210, 52), Modulate = Colors.White };
+        objectCountLabel = new Label { Text = "0 objetos | 0 selecionados", Position = new Vector2(210, 52), Modulate = new Color(0.02f, 0.04f, 0.06f) };
         outputPanel.AddChild(objectCountLabel);
-        mouseWorldLabel = new Label { Text = "Mouse: 0, 0, 0", Position = new Vector2(430, 52), Modulate = Colors.White };
+        mouseWorldLabel = new Label { Text = "Mouse: 0, 0, 0", Position = new Vector2(430, 52), Modulate = new Color(0.02f, 0.04f, 0.06f) };
         outputPanel.AddChild(mouseWorldLabel);
         fpsLabel = new Label { Text = "0 fps", Position = new Vector2(660, 52), Modulate = new Color(0.8f, 0.95f, 1f) };
         outputPanel.AddChild(fpsLabel);
@@ -641,11 +663,11 @@ public partial class StudioMain : Node3D
         var size = GetViewport().GetVisibleRect().Size;
         rootUi.Size = size;
         toolbarPanel.Position = Vector2.Zero;
-        toolbarPanel.Size = new Vector2(size.X, 42);
+        toolbarPanel.Size = new Vector2(size.X, 64);
         var rightPanelX = Mathf.Max(800, size.X - 342);
-        explorerSearch.Position = new Vector2(rightPanelX, 50);
+        explorerSearch.Position = new Vector2(rightPanelX, 72);
         explorerSearch.Size = new Vector2(334, 26);
-        explorer.Position = new Vector2(rightPanelX, 80);
+        explorer.Position = new Vector2(rightPanelX, 102);
         explorer.Size = new Vector2(334, Mathf.Max(190, (size.Y - 172) * 0.44f));
         propertiesPanel.Position = new Vector2(rightPanelX, explorer.Position.Y + explorer.Size.Y + 8);
         propertiesPanel.Size = new Vector2(334, Mathf.Max(250, size.Y - propertiesPanel.Position.Y - 86));
@@ -1504,6 +1526,132 @@ public partial class StudioMain : Node3D
         OS.ShellOpen(url);
     }
 
+    private void ToggleStudioPlay()
+    {
+        if (studioPlayMode) StopStudioPlay();
+        else StartStudioPlay();
+    }
+
+    private void StartStudioPlay()
+    {
+        if (studioPlayMode) return;
+        studioPlaySnapshot = Snapshot();
+        studioPlayMode = true;
+        ClearSelection();
+        RunLuauPreview();
+        SpawnStudioPlayer();
+        runButton.Text = "Stop";
+        status.Text = "Run ativo: WASD move, Space pula, mouse direito gira camera, Esc para parar.";
+        Log("Run started inside Studio.");
+    }
+
+    private void StopStudioPlay()
+    {
+        if (!studioPlayMode) return;
+        studioPlayMode = false;
+        studioPlayer?.QueueFree();
+        studioPlayer = null;
+        studioPlayerVisual = null;
+        studioPlayerVelocity = Vector3.Zero;
+        if (!string.IsNullOrWhiteSpace(studioPlaySnapshot)) RestoreSnapshot(studioPlaySnapshot);
+        studioPlaySnapshot = "";
+        if (runButton != null) runButton.Text = "Run";
+        status.Text = "Run parado. Projeto restaurado.";
+        Log("Run stopped.");
+    }
+
+    private void SpawnStudioPlayer()
+    {
+        studioPlayer?.QueueFree();
+        studioPlayer = new CharacterBody3D { Name = "StudioTestPlayer", Position = map.Spawn + Vector3.Up * 2.5f };
+        var collision = new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.9f, Height = 4.8f }, Position = new Vector3(0, 2.2f, 0) };
+        studioPlayer.AddChild(collision);
+        studioPlayerVisual = CreateStudioPlayerVisual();
+        studioPlayer.AddChild(studioPlayerVisual);
+        AddChild(studioPlayer);
+    }
+
+    private Node3D CreateStudioPlayerVisual()
+    {
+        var root = new Node3D { Name = "ClassicTestR6" };
+        AddStudioPlayerBlock(root, "Head", new Vector3(0, 4.45f, 0), new Vector3(1.25f, 1.05f, 1.25f), new Color(0.96f, 0.8f, 0.19f));
+        AddStudioPlayerBlock(root, "Torso", new Vector3(0, 3.15f, 0), new Vector3(2f, 1.8f, 1f), new Color(0.04f, 0.33f, 0.67f));
+        AddStudioPlayerBlock(root, "LeftArm", new Vector3(-1.45f, 3.15f, 0), new Vector3(0.8f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f));
+        AddStudioPlayerBlock(root, "RightArm", new Vector3(1.45f, 3.15f, 0), new Vector3(0.8f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f));
+        AddStudioPlayerBlock(root, "LeftLeg", new Vector3(-0.52f, 1.35f, 0), new Vector3(0.9f, 1.8f, 0.9f), new Color(0.56f, 0.68f, 0.24f));
+        AddStudioPlayerBlock(root, "RightLeg", new Vector3(0.52f, 1.35f, 0), new Vector3(0.9f, 1.8f, 0.9f), new Color(0.56f, 0.68f, 0.24f));
+        return root;
+    }
+
+    private static void AddStudioPlayerBlock(Node3D root, string name, Vector3 position, Vector3 size, Color color)
+    {
+        var part = new MeshInstance3D
+        {
+            Name = name,
+            Position = position,
+            Mesh = new BoxMesh { Size = size },
+            MaterialOverride = ClassicPlastic.Material(color, null, 1f, Vector2.One)
+        };
+        root.AddChild(part);
+    }
+
+    private void UpdateStudioPlay(double delta)
+    {
+        if (studioPlayer == null) return;
+        var input = Vector2.Zero;
+        if (Input.IsKeyPressed(Key.A)) input.X -= 1;
+        if (Input.IsKeyPressed(Key.D)) input.X += 1;
+        if (Input.IsKeyPressed(Key.W)) input.Y -= 1;
+        if (Input.IsKeyPressed(Key.S)) input.Y += 1;
+        var basis = camera.GlobalBasis;
+        var forward = -basis.Z; forward.Y = 0; forward = forward.Normalized();
+        var right = basis.X; right.Y = 0; right = right.Normalized();
+        var direction = input == Vector2.Zero ? Vector3.Zero : (right * input.X + forward * -input.Y).Normalized();
+
+        studioPlayerVelocity.X = direction.X * 7.2f;
+        studioPlayerVelocity.Z = direction.Z * 7.2f;
+        if (studioPlayer.IsOnFloor())
+        {
+            if (Input.IsKeyPressed(Key.Space)) studioPlayerVelocity.Y = 9.2f;
+            else if (studioPlayerVelocity.Y < 0) studioPlayerVelocity.Y = 0;
+        }
+        else studioPlayerVelocity.Y -= 36f * (float)delta;
+
+        studioPlayer.Velocity = studioPlayerVelocity;
+        studioPlayer.MoveAndSlide();
+        studioPlayerVelocity = studioPlayer.Velocity;
+        if (direction.Length() > 0.05f) studioPlayer.LookAt(studioPlayer.GlobalPosition + direction, Vector3.Up);
+        AnimateStudioPlayer(direction.Length() > 0.05f, !studioPlayer.IsOnFloor(), (float)delta);
+        if (!cameraRotating)
+        {
+            var desired = studioPlayer.GlobalPosition + new Vector3(0, 7.0f, 12.5f);
+            camera.Position = camera.Position.Lerp(desired, 0.12f);
+            camera.LookAt(studioPlayer.GlobalPosition + new Vector3(0, 2.8f, 0), Vector3.Up);
+            var euler = camera.RotationDegrees;
+            pitch = euler.X;
+            yaw = euler.Y;
+        }
+        if (studioPlayer.GlobalPosition.Y < -80f) studioPlayer.Position = map.Spawn + Vector3.Up * 2.5f;
+    }
+
+    private void AnimateStudioPlayer(bool walking, bool airborne, float delta)
+    {
+        if (studioPlayerVisual == null) return;
+        var swing = walking ? Mathf.Sign(Mathf.Sin(Time.GetTicksMsec() / 1000f * 8.5f)) : 0f;
+        var arm = airborne ? -115f : swing * 22f;
+        var leg = airborne ? 8f : -swing * 18f;
+        SetPreviewLimb("LeftArm", new Vector3(arm, 0, 0));
+        SetPreviewLimb("RightArm", new Vector3(arm, 0, 0));
+        SetPreviewLimb("LeftLeg", new Vector3(leg, 0, 0));
+        SetPreviewLimb("RightLeg", new Vector3(-leg, 0, 0));
+    }
+
+    private void SetPreviewLimb(string name, Vector3 rotation)
+    {
+        if (studioPlayerVisual?.GetNodeOrNull<Node3D>(name) is Node3D part)
+            part.RotationDegrees = rotation;
+    }
+
     private string CaptureThumbnail()
     {
         try
@@ -1824,6 +1972,20 @@ public partial class StudioMain : Node3D
         return button;
     }
 
+    private static Button AddMenuButton(Container parent, string text)
+    {
+        var button = new Button { Text = text, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(58, 20) };
+        var normal = new StyleBoxFlat { BgColor = new Color(0.73f, 0.78f, 0.82f, 0f), BorderWidthBottom = 0, BorderWidthLeft = 0, BorderWidthRight = 0, BorderWidthTop = 0 };
+        var hover = new StyleBoxFlat { BgColor = new Color(0.88f, 0.91f, 0.94f), BorderColor = new Color(0.42f, 0.47f, 0.52f), BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1, BorderWidthTop = 1 };
+        button.AddThemeStyleboxOverride("normal", normal);
+        button.AddThemeStyleboxOverride("hover", hover);
+        button.AddThemeStyleboxOverride("pressed", hover);
+        button.AddThemeColorOverride("font_color", new Color(0.04f, 0.05f, 0.06f));
+        button.Pressed += () => { };
+        parent.AddChild(button);
+        return button;
+    }
+
     private static Button AddToolButton(Container parent, string text, string tooltip, Action action)
     {
         var button = AddButton(parent, text, action);
@@ -1833,27 +1995,31 @@ public partial class StudioMain : Node3D
 
     private static void StyleButton(Button button)
     {
-        var normal = new StyleBoxFlat { BgColor = new Color(0.34f, 0.4f, 0.46f), BorderColor = new Color(0.72f, 0.78f, 0.82f), BorderWidthBottom = 1, BorderWidthTop = 1, BorderWidthLeft = 1, BorderWidthRight = 1, CornerRadiusBottomLeft = 2, CornerRadiusBottomRight = 2, CornerRadiusTopLeft = 2, CornerRadiusTopRight = 2 };
+        var normal = new StyleBoxFlat { BgColor = new Color(0.56f, 0.61f, 0.65f), BorderColor = new Color(0.92f, 0.95f, 0.98f), BorderWidthBottom = 1, BorderWidthTop = 1, BorderWidthLeft = 1, BorderWidthRight = 1, CornerRadiusBottomLeft = 1, CornerRadiusBottomRight = 1, CornerRadiusTopLeft = 1, CornerRadiusTopRight = 1 };
         var hover = (StyleBoxFlat)normal.Duplicate();
-        hover.BgColor = new Color(0.45f, 0.54f, 0.62f);
+        hover.BgColor = new Color(0.68f, 0.73f, 0.77f);
+        var pressed = (StyleBoxFlat)normal.Duplicate();
+        pressed.BgColor = new Color(0.43f, 0.48f, 0.52f);
+        pressed.BorderColor = new Color(0.15f, 0.18f, 0.2f);
         button.AddThemeStyleboxOverride("normal", normal);
         button.AddThemeStyleboxOverride("hover", hover);
+        button.AddThemeStyleboxOverride("pressed", pressed);
         button.AddThemeColorOverride("font_color", Colors.White);
     }
 
-    private static Label Header(string text) => new() { Text = text, Modulate = new Color(0.82f, 0.92f, 1f), HorizontalAlignment = HorizontalAlignment.Left };
+    private static Label Header(string text) => new() { Text = text, Modulate = new Color(0.05f, 0.12f, 0.2f), HorizontalAlignment = HorizontalAlignment.Left };
 
     private static Panel Panel(Vector2 position, Vector2 size, Color color)
     {
         var panel = new Panel { Position = position, Size = size };
-        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = color, BorderColor = new Color(0.4f, 0.58f, 0.74f), BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1, BorderWidthTop = 1 });
+        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = color, BorderColor = new Color(0.28f, 0.36f, 0.44f), BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1, BorderWidthTop = 1 });
         return panel;
     }
 
     private void AddLineEdit(Container parent, string label, string value, Action<string> changed)
     {
         var box = new HBoxContainer();
-        box.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(92, 0), Modulate = Colors.White });
+        box.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(92, 0), Modulate = new Color(0.04f, 0.08f, 0.12f) });
         var input = new LineEdit { Text = value, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         input.TextSubmitted += text => { if (!updatingProperties) changed(text); };
         input.FocusExited += () => { if (!updatingProperties) changed(input.Text); };
@@ -1863,7 +2029,7 @@ public partial class StudioMain : Node3D
 
     private void AddVector(Container parent, string label, Vector3 value, Action<Vector3> changed)
     {
-        parent.AddChild(new Label { Text = label, Modulate = Colors.White });
+        parent.AddChild(new Label { Text = label, Modulate = new Color(0.04f, 0.08f, 0.12f) });
         var row = new HBoxContainer();
         var xs = Spin(value.X, -2048, 2048, 0.1);
         var ys = Spin(value.Y, -2048, 2048, 0.1);
@@ -1918,7 +2084,7 @@ public partial class StudioMain : Node3D
     private void AddFloat(Container parent, string label, float value, double min, double max, Action<float> changed)
     {
         var row = new HBoxContainer();
-        row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(92, 0), Modulate = Colors.White });
+        row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(92, 0), Modulate = new Color(0.04f, 0.08f, 0.12f) });
         var spin = Spin(value, min, max, 0.05);
         spin.ValueChanged += v => { if (!updatingProperties) changed((float)v); };
         row.AddChild(spin);
@@ -1928,7 +2094,7 @@ public partial class StudioMain : Node3D
     private void AddCheck(Container parent, string label, bool value, Action<bool> changed)
     {
         var check = new CheckBox { Text = label, ButtonPressed = value };
-        check.AddThemeColorOverride("font_color", Colors.White);
+        check.AddThemeColorOverride("font_color", new Color(0.04f, 0.08f, 0.12f));
         check.Toggled += enabled => { if (!updatingProperties) changed(enabled); };
         parent.AddChild(check);
     }
@@ -1936,7 +2102,7 @@ public partial class StudioMain : Node3D
     private void AddColor(Container parent, string label, Color value, Action<Color> changed)
     {
         var row = new HBoxContainer();
-        row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(92, 0), Modulate = Colors.White });
+        row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(92, 0), Modulate = new Color(0.04f, 0.08f, 0.12f) });
         var picker = new ColorPickerButton { Color = value, CustomMinimumSize = new Vector2(120, 24) };
         picker.ColorChanged += color => { if (!updatingProperties) changed(color); };
         row.AddChild(picker);
@@ -1946,7 +2112,7 @@ public partial class StudioMain : Node3D
     private void AddOption(Container parent, string label, string[] options, string value, Action<string> changed)
     {
         var row = new HBoxContainer();
-        row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(92, 0), Modulate = Colors.White });
+        row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(92, 0), Modulate = new Color(0.04f, 0.08f, 0.12f) });
         var option = new OptionButton();
         for (var i = 0; i < options.Length; i++)
         {

@@ -1172,12 +1172,13 @@ public partial class R6Character : CharacterBody3D
         animClock += delta;
         var rawSwing = Mathf.Sin(animClock * (animState == "walk" ? 7.2f : 2.5f));
         var steppedSwing = Mathf.Abs(rawSwing) < 0.22f ? 0f : Mathf.Sign(rawSwing);
-        var armAngle = animState == "walk" ? steppedSwing * 20f : 0f;
+        var leftArmAngle = animState == "walk" ? steppedSwing * 20f : 0f;
+        var rightArmAngle = animState == "walk" ? -steppedSwing * 20f : 0f;
         var legAngle = animState == "walk" ? -steppedSwing * 18f : 0f;
-        if (animState == "jump") { armAngle = 72f; legAngle = 10f; }
-        if (animState == "fall") { armAngle = 14f; legAngle = -6f; }
-        RotatePart("LeftArm", new Vector3(armAngle, 0, 0));
-        RotatePart("RightArm", new Vector3(-armAngle, 0, 0));
+        if (animState == "jump") { leftArmAngle = -112f; rightArmAngle = -112f; legAngle = 10f; }
+        if (animState == "fall") { leftArmAngle = -22f; rightArmAngle = -22f; legAngle = -6f; }
+        RotatePart("LeftArm", new Vector3(leftArmAngle, 0, 0));
+        RotatePart("RightArm", new Vector3(rightArmAngle, 0, 0));
         RotatePart("LeftLeg", new Vector3(legAngle, 0, 0));
         RotatePart("RightLeg", new Vector3(-legAngle, 0, 0));
         RotatePart("Head", Vector3.Zero);
