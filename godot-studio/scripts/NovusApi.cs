@@ -93,7 +93,11 @@ public static class NovusApi
         if (err != Error.Ok) throw new Exception($"HTTP request failed: {err}");
         var result = await WaitForRequest(http);
         var responseText = result.Body.GetStringFromUtf8();
+        if (string.IsNullOrWhiteSpace(responseText))
+            throw new Exception($"Servidor respondeu vazio em /api/legacy/studio-project/save (HTTP {result.ResponseCode}). Isso normalmente indica erro no deploy/Render ou rota antiga ainda rodando.");
         if (result.ResponseCode >= 400) throw new Exception($"API returned {result.ResponseCode}: {ShortBody(result.Body)}");
+        if (responseText.TrimStart().StartsWith("<"))
+            throw new Exception($"Servidor retornou HTML em vez de JSON (HTTP {result.ResponseCode}). Resposta: {ShortText(responseText)}");
         try
         {
             using var doc = JsonDocument.Parse(responseText);

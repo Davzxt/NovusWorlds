@@ -240,49 +240,54 @@ router.get('/studio-games', (req, res) => {
 });
 
 router.post('/studio-project/save', (req, res) => {
-  const ticket = String(req.body.ticket || req.query.ticket || '');
-  const entry = tickets.get(ticket);
-  if (!entry || entry.mode !== 'studio' || Date.now() - entry.createdAt > TICKET_TTL_MS) return res.status(403).json({ error: 'Ticket invalido.' });
-  if (!entry.userId) return res.status(401).json({ error: 'Login necessario.' });
+  try {
+    const ticket = String(req.body.ticket || req.query.ticket || '');
+    const entry = tickets.get(ticket);
+    if (!entry || entry.mode !== 'studio' || Date.now() - entry.createdAt > TICKET_TTL_MS) return res.status(403).json({ error: 'Ticket invalido.' });
+    if (!entry.userId) return res.status(401).json({ error: 'Login necessario.' });
 
-  const title = String(req.body.title || 'Novo Mundo').trim().slice(0, 80) || 'Novo Mundo';
-  const description = String(req.body.description || '').trim().slice(0, 500);
-  const publish = req.body.publish === true || req.body.publish === 'true';
-  const maxPlayers = Math.max(1, Math.min(20, Number(req.body.maxPlayers || req.body.max_players || 20)));
-  const thumbnailUrl = String(req.body.thumbnail_url || req.body.thumbnailUrl || '').slice(0, 2_000_000);
-  const incomingId = Number(req.body.gameId || entry.gameId || 0);
-  const map = req.body.map_data && typeof req.body.map_data === 'object' ? req.body.map_data : {
-    name: title,
-    version: 1,
-    objects: [],
-    scripts: [],
-    spawnPoints: [{ x: 0, y: 4, z: 0 }],
-    ambient: '#404040',
-    skyColor: '#87CEEB'
-  };
-  map.name = title;
-  const mapJson = JSON.stringify(map, null, 2);
+    const title = String(req.body.title || 'Novo Mundo').trim().slice(0, 80) || 'Novo Mundo';
+    const description = String(req.body.description || '').trim().slice(0, 500);
+    const publish = req.body.publish === true || req.body.publish === 'true';
+    const maxPlayers = Math.max(1, Math.min(20, Number(req.body.maxPlayers || req.body.max_players || 20)));
+    const thumbnailUrl = String(req.body.thumbnail_url || req.body.thumbnailUrl || '').slice(0, 2_000_000);
+    const incomingId = Number(req.body.gameId || entry.gameId || 0);
+    const map = req.body.map_data && typeof req.body.map_data === 'object' ? req.body.map_data : {
+      name: title,
+      version: 1,
+      objects: [],
+      scripts: [],
+      spawnPoints: [{ x: 0, y: 4, z: 0 }],
+      ambient: '#404040',
+      skyColor: '#87CEEB'
+    };
+    map.name = title;
+    const mapJson = JSON.stringify(map, null, 2);
 
-  let id = incomingId;
-  if (id) {
-    const game = db.prepare('SELECT * FROM games WHERE id = ?').get(id);
-    if (!game) return res.status(404).json({ error: 'Projeto nao encontrado.' });
-    if (game.creator_id !== entry.userId) return res.status(403).json({ error: 'Sem permissao.' });
-    db.prepare(`
-      UPDATE games
-      SET title = ?, description = ?, map_data = ?, thumbnail_url = COALESCE(NULLIF(?, ''), thumbnail_url), max_players = ?, is_active = CASE WHEN ? THEN 1 ELSE is_active END, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(title, description, mapJson, thumbnailUrl, maxPlayers, publish ? 1 : 0, id);
-  } else {
-    const info = db.prepare(`
-      INSERT INTO games (title, description, creator_id, map_data, thumbnail_url, is_active, max_players)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(title, description, entry.userId, mapJson, thumbnailUrl || '/assets/textures/game-default.svg', publish ? 1 : 0, maxPlayers);
-    id = info.lastInsertRowid;
-    entry.gameId = id;
+    let id = incomingId;
+    if (id) {
+      const game = db.prepare('SELECT * FROM games WHERE id = ?').get(id);
+      if (!game) return res.status(404).json({ error: 'Projeto nao encontrado.' });
+      if (game.creator_id !== entry.userId) return res.status(403).json({ error: 'Sem permissao.' });
+      db.prepare(`
+        UPDATE games
+        SET title = ?, description = ?, map_data = ?, thumbnail_url = COALESCE(NULLIF(?, ''), thumbnail_url), max_players = ?, is_active = CASE WHEN ? THEN 1 ELSE is_active END, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(title, description, mapJson, thumbnailUrl, maxPlayers, publish ? 1 : 0, id);
+    } else {
+      const info = db.prepare(`
+        INSERT INTO games (title, description, creator_id, map_data, thumbnail_url, is_active, max_players)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(title, description, entry.userId, mapJson, thumbnailUrl || '/assets/textures/game-default.svg', publish ? 1 : 0, maxPlayers);
+      id = info.lastInsertRowid;
+      entry.gameId = id;
+    }
+    db.prepare('INSERT INTO activity_log (type, message) VALUES (?, ?)').run('studio', publish ? `Jogo publicado pelo Studio: ${title}` : `Projeto salvo pelo Studio: ${title}`);
+    return res.json({ ok: true, id, published: publish });
+  } catch (err) {
+    console.error('[studio-project/save]', err);
+    return res.status(500).json({ error: err?.message || 'Erro ao salvar projeto.' });
   }
-  db.prepare('INSERT INTO activity_log (type, message) VALUES (?, ?)').run('studio', publish ? `Jogo publicado pelo Studio: ${title}` : `Projeto salvo pelo Studio: ${title}`);
-  res.json({ ok: true, id, published: publish });
 });
 
 router.get('/assets/:id', (req, res) => {

@@ -15,7 +15,6 @@ public partial class StudioMain : Node3D
     private CanvasLayer ui = null!;
     private Control rootUi = null!;
     private Panel toolbarPanel = null!;
-    private Panel toolboxPanel = null!;
     private Panel propertiesPanel = null!;
     private Panel scriptPanel = null!;
     private Panel outputPanel = null!;
@@ -259,6 +258,9 @@ public partial class StudioMain : Node3D
         AddToolButton(top, "Rotate", "Rotacionar (3)", () => SetMode(ToolMode.Rotate));
         AddToolButton(top, "Scale", "Escalar (4)", () => SetMode(ToolMode.Scale));
         AddToolButton(top, "Paint", "Pintar objeto clicado (5)", () => SetMode(ToolMode.Paint));
+        AddToolButton(top, "Part", "Inserir bloco", () => AddPart("Part"));
+        AddToolButton(top, "Spawn", "Inserir SpawnPoint", AddSpawn);
+        AddToolButton(top, "Script", "Criar script", AddScript);
         snapToggle = new CheckBox { Text = "Snap", ButtonPressed = true, TooltipText = "Snap to Grid" };
         snapToggle.Toggled += on => snapStep = on ? CurrentSnapStep() : 0f;
         top.AddChild(snapToggle);
@@ -283,32 +285,6 @@ public partial class StudioMain : Node3D
         AddToolButton(top, "Dashboard", "Abrir painel de projetos", ShowDashboard);
         AddToolButton(top, "Open", "Abrir .nwm", () => openDialog.PopupCentered(new Vector2I(720, 520)));
         AddToolButton(top, "Export", "Exportar .nwm", ExportProjectFile);
-
-        toolboxPanel = Panel(new Vector2(8, 50), new Vector2(224, 515), new Color(0.11f, 0.18f, 0.27f, 0.97f));
-        rootUi.AddChild(toolboxPanel);
-        var tools = new VBoxContainer { Position = new Vector2(8, 8), Size = new Vector2(208, 500) };
-        toolboxPanel.AddChild(tools);
-        tools.AddChild(Header("Toolbox"));
-        tools.AddChild(Header("Partes Basicas"));
-        AddButton(tools, "Cubo", () => AddPart("Part"));
-        AddButton(tools, "Esfera", () => AddPart("Ball"));
-        AddButton(tools, "Cilindro", () => AddPart("Cylinder"));
-        AddButton(tools, "Cunha", () => AddPart("Wedge"));
-        AddButton(tools, "CornerWedge", () => AddPart("CornerWedge"));
-        AddButton(tools, "Baseplate 512", () => AddBaseplate());
-        tools.AddChild(Header("Objetos Especiais"));
-        AddButton(tools, "SpawnPoint", AddSpawn);
-        AddButton(tools, "PointLight", () => AddLight("PointLight"));
-        AddButton(tools, "SurfaceLight", () => AddLight("SurfaceLight"));
-        AddButton(tools, "Script", AddScript);
-        AddButton(tools, "Model", AddEmptyModel);
-        AddButton(tools, "Decal", () => AddPresetPart("Decal", Vector3.Up * 2, new Vector3(4, 0.05f, 4), Colors.White, "Glass"));
-        tools.AddChild(Header("Modelos 2008"));
-        AddButton(tools, "Casa simples", AddSimpleHouse);
-        AddButton(tools, "Arvore", AddTree);
-        AddButton(tools, "Pedra", AddStone);
-        AddButton(tools, "Obby Starter", AddObbyStarter);
-        AddButton(tools, "Classic Tower", AddClassicTower);
 
         explorerSearch = new LineEdit { PlaceholderText = "Buscar no Explorer", Position = new Vector2(1046, 50), Size = new Vector2(326, 26) };
         explorerSearch.TextChanged += _ => RebuildExplorer();
@@ -666,8 +642,6 @@ public partial class StudioMain : Node3D
         rootUi.Size = size;
         toolbarPanel.Position = Vector2.Zero;
         toolbarPanel.Size = new Vector2(size.X, 42);
-        toolboxPanel.Position = new Vector2(8, 50);
-        toolboxPanel.Size = new Vector2(224, Mathf.Max(360, size.Y - 146));
         var rightPanelX = Mathf.Max(800, size.X - 342);
         explorerSearch.Position = new Vector2(rightPanelX, 50);
         explorerSearch.Size = new Vector2(334, 26);
@@ -678,7 +652,7 @@ public partial class StudioMain : Node3D
         propertiesScroll.Size = new Vector2(propertiesPanel.Size.X - 16, propertiesPanel.Size.Y - 16);
         properties.CustomMinimumSize = new Vector2(propertiesScroll.Size.X - 18, 0);
 
-        var centerX = toolboxPanel.Position.X + toolboxPanel.Size.X + 8;
+        var centerX = 8f;
         var rightX = rightPanelX - 8;
         var centerW = Mathf.Max(520, rightX - centerX);
         scriptPanel.Position = new Vector2(centerX, Mathf.Max(400, size.Y - 248));
@@ -2013,7 +1987,7 @@ public partial class StudioMain : Node3D
     private bool IsPointerOverUi(Vector2 pos)
     {
         bool Hit(Control control) => control != null && new Rect2(control.GlobalPosition, control.Size).HasPoint(pos);
-        return Hit(toolbarPanel) || Hit(toolboxPanel) || Hit(explorerSearch) || Hit(explorer) || Hit(propertiesPanel) || Hit(scriptPanel) || Hit(outputPanel);
+        return Hit(toolbarPanel) || Hit(explorerSearch) || Hit(explorer) || Hit(propertiesPanel) || Hit(scriptPanel) || Hit(outputPanel) || Hit(dashboardPanel);
     }
 
     private static string ReadArg(string[] args, string name, string fallback)

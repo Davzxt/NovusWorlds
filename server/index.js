@@ -89,6 +89,12 @@ app.get('/api/animation-presets', (req, res) => {
 app.get('/admin', (req, res) => res.redirect('/admin/index.html'));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 
+app.use((err, req, res, next) => {
+  console.error('[server-error]', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: err?.message || 'Erro interno do servidor.' });
+});
+
 attachGameServer(server);
 
 const port = process.env.PORT || 3000;
