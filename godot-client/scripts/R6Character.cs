@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 public partial class R6Character : CharacterBody3D
 {
-    [Export] public float WalkSpeed = 5.8f;
+    [Export] public float WalkSpeed = 7.2f;
     [Export] public float JumpVelocity = 8.15f;
     [Export] public bool IsRemote;
 
@@ -1170,13 +1170,12 @@ public partial class R6Character : CharacterBody3D
     private void AnimateClassic(float delta)
     {
         animClock += delta;
-        var rawSwing = Mathf.Sin(animClock * (animState == "walk" ? 7.2f : 2.5f));
-        var steppedSwing = Mathf.Abs(rawSwing) < 0.22f ? 0f : Mathf.Sign(rawSwing);
-        var leftArmAngle = animState == "walk" ? steppedSwing * 20f : 0f;
-        var rightArmAngle = animState == "walk" ? -steppedSwing * 20f : 0f;
-        var legAngle = animState == "walk" ? -steppedSwing * 18f : 0f;
-        if (animState == "jump") { leftArmAngle = -112f; rightArmAngle = -112f; legAngle = 10f; }
-        if (animState == "fall") { leftArmAngle = -22f; rightArmAngle = -22f; legAngle = -6f; }
+        var rawSwing = Mathf.Sin(animClock * (animState == "walk" ? 8.1f : 2.5f));
+        var leftArmAngle = animState == "walk" ? rawSwing * 34f : 0f;
+        var rightArmAngle = animState == "walk" ? -rawSwing * 34f : 0f;
+        var legAngle = animState == "walk" ? -rawSwing * 28f : 0f;
+        if (animState == "jump") { leftArmAngle = -118f; rightArmAngle = -118f; legAngle = 12f; }
+        if (animState == "fall") { leftArmAngle = -34f; rightArmAngle = -34f; legAngle = -8f; }
         RotatePart("LeftArm", new Vector3(leftArmAngle, 0, 0));
         RotatePart("RightArm", new Vector3(rightArmAngle, 0, 0));
         RotatePart("LeftLeg", new Vector3(legAngle, 0, 0));

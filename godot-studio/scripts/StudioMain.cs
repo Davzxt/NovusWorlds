@@ -263,50 +263,61 @@ public partial class StudioMain : Node3D
         rootUi.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         ui.AddChild(rootUi);
 
-        toolbarPanel = Panel(new Vector2(0, 0), new Vector2(1366, 64), new Color(0.73f, 0.78f, 0.82f, 0.99f));
+        toolbarPanel = Panel(new Vector2(0, 0), new Vector2(1366, 112), new Color(0.94f, 0.94f, 0.94f, 0.99f));
         rootUi.AddChild(toolbarPanel);
-        var bars = new VBoxContainer { Position = new Vector2(6, 3), Size = new Vector2(1340, 58) };
+        var bars = new VBoxContainer { Position = new Vector2(6, 2), Size = new Vector2(1340, 108) };
         toolbarPanel.AddChild(bars);
-        var menu = new HBoxContainer { CustomMinimumSize = new Vector2(1340, 24) };
+        var menu = new HBoxContainer { CustomMinimumSize = new Vector2(1340, 22) };
         bars.AddChild(menu);
-        titleLabel = new Label { Text = $"Novus Worlds Studio - {map.Name}", CustomMinimumSize = new Vector2(250, 22), Modulate = new Color(0.02f, 0.05f, 0.08f) };
-        menu.AddChild(titleLabel);
-        foreach (var label in new[] { "File", "Edit", "View", "Insert", "Tools", "Window", "Help" })
+        foreach (var label in new[] { "File", "Edit", "View", "Insert", "Format", "Tools", "Window", "Help" })
             AddMenuButton(menu, label);
         var top = new HBoxContainer { CustomMinimumSize = new Vector2(1340, 30) };
         bars.AddChild(top);
-        AddToolButton(top, "Select", "Selecionar (1)", () => SetMode(ToolMode.Select));
-        AddToolButton(top, "Move", "Mover (2)", () => SetMode(ToolMode.Move));
-        AddToolButton(top, "Rotate", "Rotacionar (3)", () => SetMode(ToolMode.Rotate));
-        AddToolButton(top, "Scale", "Escalar (4)", () => SetMode(ToolMode.Scale));
-        AddToolButton(top, "Paint", "Pintar objeto clicado (5)", () => SetMode(ToolMode.Paint));
-        AddToolButton(top, "Part", "Inserir bloco", () => AddPart("Part"));
-        AddToolButton(top, "Spawn", "Inserir SpawnPoint", AddSpawn);
-        AddToolButton(top, "Script", "Criar script", AddScript);
+        AddToolButton(top, "New", "Novo jogo", NewProjectFromDashboard);
+        AddToolButton(top, "Open", "Abrir .nwm", () => openDialog.PopupCentered(new Vector2I(720, 520)));
+        AddToolButton(top, "Save", "Salvar (Ctrl+S)", () => SaveProject(false));
+        AddToolButton(top, "Undo", "Desfazer (Ctrl+Z)", Undo);
+        AddToolButton(top, "Redo", "Refazer (Ctrl+Y)", Redo);
+        runButton = AddToolButton(top, "Run", "Rodar o jogo dentro do Studio", ToggleStudioPlay);
+        AddToolButton(top, "Stop", "Parar teste local", StopStudioPlay);
+        AddToolButton(top, "Publish", "Publicar jogo", OpenPublishDialog);
+        AddToolButton(top, "Dashboard", "Abrir painel de projetos", ShowDashboard);
+
+        var tools = new HBoxContainer { CustomMinimumSize = new Vector2(1340, 30) };
+        bars.AddChild(tools);
+        AddToolButton(tools, "Select", "Selecionar (1)", () => SetMode(ToolMode.Select));
+        AddToolButton(tools, "Move", "Mover (2)", () => SetMode(ToolMode.Move));
+        AddToolButton(tools, "Rotate", "Rotacionar (3)", () => SetMode(ToolMode.Rotate));
+        AddToolButton(tools, "Scale", "Escalar (4)", () => SetMode(ToolMode.Scale));
+        AddToolButton(tools, "Paint", "Pintar objeto clicado (5)", () => SetMode(ToolMode.Paint));
+        AddToolButton(tools, "Part", "Inserir bloco", () => AddPart("Part"));
+        AddToolButton(tools, "Ball", "Inserir esfera", () => AddPart("Ball"));
+        AddToolButton(tools, "Wedge", "Inserir cunha", () => AddPart("Wedge"));
+        AddToolButton(tools, "Spawn", "Inserir SpawnPoint", AddSpawn);
+        AddToolButton(tools, "Script", "Criar script", AddScript);
         snapToggle = new CheckBox { Text = "Snap", ButtonPressed = true, TooltipText = "Snap to Grid" };
         snapToggle.Toggled += on => snapStep = on ? CurrentSnapStep() : 0f;
-        top.AddChild(snapToggle);
+        tools.AddChild(snapToggle);
         snapStepSelect = new OptionButton { CustomMinimumSize = new Vector2(70, 24), TooltipText = "Tamanho da grade" };
         foreach (var label in new[] { "0.25", "0.5", "1", "2", "4" }) snapStepSelect.AddItem(label);
         snapStepSelect.Select(2);
         snapStepSelect.ItemSelected += _ => { snapStep = CurrentSnapStep(); RebuildGrid(); };
-        top.AddChild(snapStepSelect);
+        tools.AddChild(snapStepSelect);
         wireframeToggle = new CheckBox { Text = "Wire", TooltipText = "Modo wireframe" };
         wireframeToggle.Toggled += value =>
         {
             wireframe = value;
             RenderingServer.ViewportSetDebugDraw(GetViewport().GetViewportRid(), value ? RenderingServer.ViewportDebugDraw.Wireframe : RenderingServer.ViewportDebugDraw.Disabled);
         };
-        top.AddChild(wireframeToggle);
+        tools.AddChild(wireframeToggle);
         paintPicker = new ColorPickerButton { Color = new Color(0.8f, 0.1f, 0.08f), CustomMinimumSize = new Vector2(38, 24), TooltipText = "Cor da ferramenta Pintar" };
-        top.AddChild(paintPicker);
-        runButton = AddToolButton(top, "Run", "Rodar o jogo dentro do Studio", ToggleStudioPlay);
-        AddToolButton(top, "Save", "Salvar (Ctrl+S)", () => SaveProject(false));
-        AddToolButton(top, "Publish", "Publicar jogo", OpenPublishDialog);
-        AddToolButton(top, "Test Private", "Salvar rascunho e testar no client sem publicar", TestGame);
-        AddToolButton(top, "Dashboard", "Abrir painel de projetos", ShowDashboard);
-        AddToolButton(top, "Open", "Abrir .nwm", () => openDialog.PopupCentered(new Vector2I(720, 520)));
-        AddToolButton(top, "Export", "Exportar .nwm", ExportProjectFile);
+        tools.AddChild(paintPicker);
+        AddToolButton(tools, "Test Private", "Salvar rascunho e testar no client sem publicar", TestGame);
+        AddToolButton(tools, "Export", "Exportar .nwm", ExportProjectFile);
+        var tabStrip = new HBoxContainer { CustomMinimumSize = new Vector2(1340, 24) };
+        bars.AddChild(tabStrip);
+        titleLabel = new Label { Text = $"{map.Name}.nwm", CustomMinimumSize = new Vector2(240, 22), Modulate = new Color(0.02f, 0.05f, 0.08f) };
+        tabStrip.AddChild(titleLabel);
 
         explorerSearch = new LineEdit { PlaceholderText = "Buscar no Explorer", Position = new Vector2(1046, 50), Size = new Vector2(326, 26) };
         explorerSearch.TextChanged += _ => RebuildExplorer();
@@ -663,11 +674,11 @@ public partial class StudioMain : Node3D
         var size = GetViewport().GetVisibleRect().Size;
         rootUi.Size = size;
         toolbarPanel.Position = Vector2.Zero;
-        toolbarPanel.Size = new Vector2(size.X, 64);
+        toolbarPanel.Size = new Vector2(size.X, 112);
         var rightPanelX = Mathf.Max(800, size.X - 342);
-        explorerSearch.Position = new Vector2(rightPanelX, 72);
+        explorerSearch.Position = new Vector2(rightPanelX, 120);
         explorerSearch.Size = new Vector2(334, 26);
-        explorer.Position = new Vector2(rightPanelX, 102);
+        explorer.Position = new Vector2(rightPanelX, 150);
         explorer.Size = new Vector2(334, Mathf.Max(190, (size.Y - 172) * 0.44f));
         propertiesPanel.Position = new Vector2(rightPanelX, explorer.Position.Y + explorer.Size.Y + 8);
         propertiesPanel.Size = new Vector2(334, Mathf.Max(250, size.Y - propertiesPanel.Position.Y - 86));
@@ -691,7 +702,7 @@ public partial class StudioMain : Node3D
         if (dashboardPanel != null)
         {
             dashboardPanel.Size = new Vector2(Mathf.Min(860, size.X - 80), Mathf.Min(580, size.Y - 90));
-            dashboardPanel.Position = new Vector2((size.X - dashboardPanel.Size.X) * 0.5f, 62);
+            dashboardPanel.Position = new Vector2((size.X - dashboardPanel.Size.X) * 0.5f, 118);
         }
     }
 
@@ -1540,7 +1551,7 @@ public partial class StudioMain : Node3D
         ClearSelection();
         RunLuauPreview();
         SpawnStudioPlayer();
-        runButton.Text = "Stop";
+        runButton.Text = "Run";
         status.Text = "Run ativo: WASD move, Space pula, mouse direito gira camera, Esc para parar.";
         Log("Run started inside Studio.");
     }
@@ -1834,7 +1845,7 @@ public partial class StudioMain : Node3D
     {
         var text = $"Novus Worlds Studio - {map.Name}{(dirty ? " *" : "")}";
         DisplayServer.WindowSetTitle(text);
-        if (titleLabel != null) titleLabel.Text = text;
+        if (titleLabel != null) titleLabel.Text = $"{map.Name}.nwm{(dirty ? " *" : "")}";
     }
 
     private void PushUndo()

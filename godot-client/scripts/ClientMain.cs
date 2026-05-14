@@ -647,32 +647,39 @@ public partial class ClientMain : Node3D
         };
         root.AddChild(centerReticle);
 
-        topBar = Panel(Vector2.Zero, new Vector2(1280, 25), new Color(0.80f, 0.82f, 0.84f, 0.76f));
+        topBar = new Control { Name = "Classic2011Controls", Size = new Vector2(190, 86) };
         root.AddChild(topBar);
-        topBar.AddChild(new Label { Text = "Novus Worlds", Position = new Vector2(10, 4), Modulate = Colors.White });
-        AddTopButton("Reset", 250, () => RespawnPlayer(false, true));
-        AddTopButton("Help", 330, () => { AddChatLine("WASD move, right mouse rotates camera, mouse wheel zooms, / opens chat."); PlayClick(); });
-        AddTopButton("Exit", 410, () => { PlayClick(); GetTree().Quit(); });
+        AddTopButton("Lock Mouse", 0, 0, 146, () =>
+        {
+            shiftLock = !shiftLock;
+            UpdateCameraMode();
+            PlayClick();
+        });
+        AddTopButton("Leave", 0, 42, 58, () => { PlayClick(); GetTree().Quit(); });
+        AddTopButton("Menu", 68, 42, 44, () => { AddChatLine("WASD move, right mouse rotates camera, mouse wheel zooms, / opens chat."); PlayClick(); });
+        AddTopButton("Gear", 122, 42, 44, () => { PlayClick(); });
 
-        healthPanel = new Control { Position = new Vector2(1130, 290), Size = new Vector2(90, 170) };
+        healthPanel = Panel(Vector2.Zero, new Vector2(176, 24), new Color(0f, 0f, 0f, 0.68f));
         root.AddChild(healthPanel);
-        healthFill = new ColorRect { Position = new Vector2(35, 0), Size = new Vector2(7, 138), Color = new Color(0.38f, 0.78f, 0.22f) };
+        healthFill = new ColorRect { Position = new Vector2(4, 5), Size = new Vector2(168, 12), Color = new Color(0.05f, 0.72f, 0.05f) };
         healthPanel.AddChild(healthFill);
-        healthLabel = new Label { Text = "Health", Position = new Vector2(14, 140), Modulate = Colors.Blue };
+        healthLabel = new Label { Text = "HEALTH", Position = new Vector2(116, 3), Size = new Vector2(54, 16), HorizontalAlignment = HorizontalAlignment.Right, Modulate = Colors.White };
         healthPanel.AddChild(healthLabel);
 
-        playerListPanel = Panel(new Vector2(1048, 32), new Vector2(210, 180), new Color(0.72f, 0.72f, 0.72f, 0.52f));
+        playerListPanel = Panel(new Vector2(1048, 8), new Vector2(336, 76), new Color(0.12f, 0.16f, 0.22f, 0.58f));
         root.AddChild(playerListPanel);
-        playerList = new Label { Text = "Player List", Position = new Vector2(8, 5), Modulate = Colors.White };
+        playerListPanel.AddChild(new ColorRect { Position = new Vector2(0, 30), Size = new Vector2(336, 20), Color = new Color(0.72f, 0.18f, 0.18f, 0.82f) });
+        playerListPanel.AddChild(new Label { Text = "Players", Position = new Vector2(8, 5), Size = new Vector2(220, 24), Modulate = Colors.White });
+        playerList = new Label { Text = "", Position = new Vector2(20, 31), Size = new Vector2(292, 42), Modulate = new Color(1f, 0.08f, 0.04f) };
         playerListPanel.AddChild(playerList);
 
-        inventoryPanel = Panel(new Vector2(8, 625), new Vector2(300, 76), new Color(0.72f, 0.74f, 0.76f, 0.36f));
+        inventoryPanel = Panel(new Vector2(8, 625), new Vector2(300, 76), new Color(0f, 0f, 0f, 0.38f));
         root.AddChild(inventoryPanel);
         BuildInventory();
 
-        chatPanel = new Control { Position = new Vector2(8, 32), Size = new Vector2(360, 136) };
+        chatPanel = new Control { Position = new Vector2(8, 28), Size = new Vector2(520, 136) };
         root.AddChild(chatPanel);
-        chatLog = new RichTextLabel { Position = Vector2.Zero, Size = new Vector2(360, 112), BbcodeEnabled = false, ScrollActive = true, Modulate = Colors.White };
+        chatLog = new RichTextLabel { Position = Vector2.Zero, Size = new Vector2(520, 112), BbcodeEnabled = false, ScrollActive = true, Modulate = Colors.White };
         chatPanel.AddChild(chatLog);
         chatInput = new LineEdit { PlaceholderText = "To chat click here or press the / key", Position = new Vector2(8, 690), Size = new Vector2(520, 24) };
         chatInput.TextSubmitted += SendChatMessage;
@@ -681,9 +688,28 @@ public partial class ClientMain : Node3D
         LayoutHud();
     }
 
-    private void AddTopButton(string text, float x, Action action)
+    private void AddTopButton(string text, float x, float y, float width, Action action)
     {
-        var button = new Button { Text = text, Position = new Vector2(x, 0), Size = new Vector2(72, 24), Flat = true, FocusMode = Control.FocusModeEnum.None };
+        var button = new Button { Text = text, Position = new Vector2(x, y), Size = new Vector2(width, 34), FocusMode = Control.FocusModeEnum.None };
+        var normal = new StyleBoxFlat
+        {
+            BgColor = new Color(0.08f, 0.08f, 0.08f, 0.48f),
+            BorderColor = new Color(0.78f, 0.78f, 0.78f, 0.42f),
+            BorderWidthBottom = 1,
+            BorderWidthLeft = 1,
+            BorderWidthRight = 1,
+            BorderWidthTop = 1,
+            CornerRadiusBottomLeft = 3,
+            CornerRadiusBottomRight = 3,
+            CornerRadiusTopLeft = 3,
+            CornerRadiusTopRight = 3
+        };
+        var hover = (StyleBoxFlat)normal.Duplicate();
+        hover.BgColor = new Color(0.16f, 0.16f, 0.16f, 0.68f);
+        button.AddThemeStyleboxOverride("normal", normal);
+        button.AddThemeStyleboxOverride("hover", hover);
+        button.AddThemeStyleboxOverride("pressed", hover);
+        button.AddThemeColorOverride("font_color", Colors.White);
         button.Pressed += action;
         topBar.AddChild(button);
     }
@@ -758,7 +784,7 @@ public partial class ClientMain : Node3D
     private void UpdatePlayerList()
     {
         if (playerList == null) return;
-        var text = "Player List\n" + localAvatar.Username + "\n";
+        var text = localAvatar.Username + "\n";
         foreach (var id in knownPlayers)
             if (id != localNetworkId) text += PlayerName(id) + "\n";
         playerList.Text = text;
@@ -767,11 +793,11 @@ public partial class ClientMain : Node3D
     private void LayoutHud()
     {
         var size = GetViewport().GetVisibleRect().Size;
-        if (topBar != null) topBar.Size = new Vector2(size.X, 25);
-        if (playerListPanel != null) playerListPanel.Position = new Vector2(size.X - 220, 31);
-        if (healthPanel != null) healthPanel.Position = new Vector2(size.X - 125, size.Y * 0.36f);
-        if (inventoryPanel != null) inventoryPanel.Position = new Vector2(8, size.Y - 96);
-        if (chatInput != null) chatInput.Position = new Vector2(8, size.Y - 30);
+        if (topBar != null) topBar.Position = new Vector2(4, size.Y - 88);
+        if (playerListPanel != null) playerListPanel.Position = new Vector2(size.X - 340, 8);
+        if (healthPanel != null) healthPanel.Position = new Vector2(size.X * 0.5f - 88, size.Y - 31);
+        if (inventoryPanel != null) inventoryPanel.Position = new Vector2(size.X * 0.5f - inventoryPanel.Size.X * 0.5f, size.Y - 86);
+        if (chatInput != null) chatInput.Position = new Vector2(4, size.Y - 25);
         if (centerReticle != null) centerReticle.Position = size * 0.5f - centerReticle.Size * 0.5f;
     }
 
@@ -784,18 +810,38 @@ public partial class ClientMain : Node3D
         inventoryPanel.Visible = items.Count > 0;
         if (!inventoryPanel.Visible) return;
         var count = Mathf.Min(5, items.Count);
-        inventoryPanel.Size = new Vector2(10 + count * 56, 76);
+        inventoryPanel.Size = new Vector2(8 + count * 58, 58);
         for (var i = 0; i < count; i++)
         {
             var item = items[i];
             var button = new Button
             {
                 Text = (i + 1).ToString(),
-                Position = new Vector2(8 + i * 56, 18),
-                Size = new Vector2(48, 48),
+                Position = new Vector2(5 + i * 58, 5),
+                Size = new Vector2(52, 52),
                 TooltipText = item.Name,
                 FocusMode = Control.FocusModeEnum.None
             };
+            var normal = new StyleBoxFlat
+            {
+                BgColor = new Color(0.02f, 0.02f, 0.025f, 0.86f),
+                BorderColor = new Color(0.68f, 0.68f, 0.68f, 0.72f),
+                BorderWidthBottom = 2,
+                BorderWidthLeft = 2,
+                BorderWidthRight = 2,
+                BorderWidthTop = 2,
+                CornerRadiusBottomLeft = 2,
+                CornerRadiusBottomRight = 2,
+                CornerRadiusTopLeft = 2,
+                CornerRadiusTopRight = 2
+            };
+            var selected = (StyleBoxFlat)normal.Duplicate();
+            selected.BorderColor = new Color(1f, 0.04f, 0.03f);
+            selected.BgColor = new Color(0f, 0f, 0f, 0.94f);
+            button.AddThemeStyleboxOverride("normal", normal);
+            button.AddThemeStyleboxOverride("hover", selected);
+            button.AddThemeStyleboxOverride("pressed", selected);
+            button.AddThemeColorOverride("font_color", Colors.White);
             var slot = i;
             button.Pressed += () => SelectInventorySlot(slot);
             inventoryPanel.AddChild(button);
@@ -809,7 +855,15 @@ public partial class ClientMain : Node3D
         if (slot < 0 || slot >= inventorySlots.Count) return;
         selectedInventorySlot = slot;
         for (var i = 0; i < inventorySlots.Count; i++)
-            inventorySlots[i].Modulate = i == selectedInventorySlot ? new Color(1f, 0.95f, 0.55f) : Colors.White;
+        {
+            inventorySlots[i].Modulate = Colors.White;
+            if (inventorySlots[i].GetThemeStylebox("normal") is StyleBoxFlat style)
+            {
+                var next = (StyleBoxFlat)style.Duplicate();
+                next.BorderColor = i == selectedInventorySlot ? new Color(1f, 0.03f, 0.02f) : new Color(0.68f, 0.68f, 0.68f, 0.72f);
+                inventorySlots[i].AddThemeStyleboxOverride("normal", next);
+            }
+        }
         if (playSound) PlayClick();
     }
 
@@ -824,10 +878,10 @@ public partial class ClientMain : Node3D
         if (killed) AddChatLine($"{localAvatar.Username} caiu no void.");
         if (healthFill != null)
         {
-            healthFill.Size = new Vector2(7, killed ? 0 : 138);
+            healthFill.Size = new Vector2(killed ? 0 : 168, 12);
             GetTree().CreateTimer(0.3).Timeout += () =>
             {
-                if (IsInstanceValid(healthFill)) healthFill.Size = new Vector2(7, 138);
+                if (IsInstanceValid(healthFill)) healthFill.Size = new Vector2(168, 12);
             };
         }
         PlayClick();
