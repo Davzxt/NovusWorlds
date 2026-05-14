@@ -95,7 +95,7 @@ public static class MapBuilder
 
     private static Vector2 TextureScaleFor(NovusPart part)
     {
-        var tileStuds = part.Name.Equals("Baseplate", System.StringComparison.OrdinalIgnoreCase) ? 4f : 3f;
+        var tileStuds = 2f;
         return new Vector2(
             Mathf.Max(1f, part.Size.X / tileStuds),
             Mathf.Max(1f, part.Size.Z / tileStuds)

@@ -279,7 +279,7 @@ public partial class StudioMain : Node3D
         AddToolButton(top, "Run", "Executar script local", RunLuauPreview);
         AddToolButton(top, "Save", "Salvar (Ctrl+S)", () => SaveProject(false));
         AddToolButton(top, "Publish", "Publicar jogo", OpenPublishDialog);
-        AddToolButton(top, "Test", "Testar jogo salvo", TestGame);
+        AddToolButton(top, "Test Private", "Salvar rascunho e testar no client sem publicar", TestGame);
         AddToolButton(top, "Dashboard", "Abrir painel de projetos", ShowDashboard);
         AddToolButton(top, "Open", "Abrir .nwm", () => openDialog.PopupCentered(new Vector2I(720, 520)));
         AddToolButton(top, "Export", "Exportar .nwm", ExportProjectFile);

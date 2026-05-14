@@ -80,10 +80,12 @@ function getResolvedAvatar(user, req) {
 router.post('/tickets', (req, res) => {
   const user = getUserByRequest(req);
   const gameId = Number(req.body.gameId || req.query.gameId || 1);
-  const game = db.prepare('SELECT id, title FROM games WHERE id = ? AND is_active = 1').get(gameId);
+  const game = db.prepare('SELECT id, title, creator_id, is_active FROM games WHERE id = ?').get(gameId);
   if (!game) return res.status(404).json({ error: 'Jogo nao encontrado.' });
+  const canPrivateTest = req.session.user && (req.session.user.is_admin || Number(game.creator_id) === Number(req.session.user.id));
+  if (!game.is_active && !canPrivateTest) return res.status(404).json({ error: 'Jogo nao encontrado.' });
   const ticket = crypto.randomBytes(24).toString('hex');
-  tickets.set(ticket, { userId: user.id, username: user.username, gameId, createdAt: Date.now() });
+  tickets.set(ticket, { userId: user.id, username: user.username, gameId, privateTest: !game.is_active && canPrivateTest, createdAt: Date.now() });
   res.json({
     ticket,
     gameId,

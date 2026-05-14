@@ -36,8 +36,11 @@ public static class NovusTemplates
 
         Add(map, "Volcano Core", "Cylinder", new Vector3(40, 8, -66), new Vector3(18, 16, 18), new Color(0.24f, 0.12f, 0.08f), "Stone");
         Add(map, "Lava Vent", "Cylinder", new Vector3(40, 16.5f, -66), new Vector3(10, 1, 10), new Color(1f, 0.15f, 0.02f), "Neon");
-        Add(map, "Meteor Marker 1", "Ball", new Vector3(-2, 18, -42), new Vector3(5, 5, 5), new Color(0.9f, 0.45f, 0.08f), "Neon");
-        Add(map, "Meteor Marker 2", "Ball", new Vector3(14, 21, -58), new Vector3(4, 4, 4), new Color(0.9f, 0.45f, 0.08f), "Neon");
+        Add(map, "Meteor Marker 1", "Ball", new Vector3(-2, 18, -42), new Vector3(5, 5, 5), new Color(0.9f, 0.45f, 0.08f), "Neon").Anchored = false;
+        Add(map, "Meteor Marker 2", "Ball", new Vector3(14, 21, -58), new Vector3(4, 4, 4), new Color(0.9f, 0.45f, 0.08f), "Neon").Anchored = false;
+        Add(map, "Meteor Marker 3", "Ball", new Vector3(-18, 24, -30), new Vector3(4, 4, 4), new Color(0.95f, 0.35f, 0.05f), "Neon").Anchored = false;
+        Add(map, "Loose Disaster Brick A", "Part", new Vector3(4, 14, -42), new Vector3(8, 2, 4), new Color(0.75f, 0.1f, 0.08f), "Brick").Anchored = false;
+        Add(map, "Loose Disaster Brick B", "Part", new Vector3(10, 17, -48), new Vector3(5, 5, 5), new Color(0.1f, 0.25f, 0.9f), "Plastic").Anchored = false;
         Add(map, "Flood Safe Rock", "Part", new Vector3(-42, 3, -28), new Vector3(16, 6, 14), new Color(0.4f, 0.4f, 0.43f), "Stone");
 
         for (var i = 0; i < 8; i++)

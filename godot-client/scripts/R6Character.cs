@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -160,7 +161,47 @@ public partial class R6Character : CharacterBody3D
 
     private Node3D CreateVisual()
     {
-        return CreateLocalR6Visual() ?? CreatePyramidR6Visual();
+        return CreateObjR6Visual() ?? CreateLocalR6Visual() ?? CreatePyramidR6Visual();
+    }
+
+    private Node3D? CreateObjR6Visual()
+    {
+        var source = FindExternalObjR6();
+        if (string.IsNullOrWhiteSpace(source)) return null;
+        try
+        {
+            var texturePath = Path.Combine(Path.GetDirectoryName(source) ?? "", "texture.png");
+            var texture = File.Exists(texturePath) ? LoadTextureFromFile(texturePath) : null;
+            var groups = LoadObjGroups(source, texture);
+            if (groups.Count == 0) return null;
+            GD.Print($"Novus R6 loaded from OBJ: {source}");
+
+            var sources = ClassifyObjGroups(groups);
+            if (sources.HasCompleteRig)
+            {
+                var root = new Node3D { Name = "ObjR6Asset" };
+                AddImportedPart(root, "Torso", new Vector3(0, 2.1f, 0), Vector3.Zero, new Vector3(2f, 2f, 1f), new Color(0.05f, 0.41f, 0.67f), sources.Torso!);
+                AddImportedPart(root, "Head", new Vector3(0, 3.62f, 0), Vector3.Zero, new Vector3(1.38f, 1.38f, 1.38f), new Color(0.96f, 0.8f, 0.19f), sources.Head!);
+                AddImportedPart(root, "LeftArm", new Vector3(-1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f), sources.LeftArm!);
+                AddImportedPart(root, "RightArm", new Vector3(1.35f, 2.85f, 0), new Vector3(0, -0.75f, 0), new Vector3(0.7f, 1.8f, 0.8f), new Color(0.96f, 0.8f, 0.19f), sources.RightArm!);
+                AddImportedPart(root, "LeftLeg", new Vector3(-0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f), sources.LeftLeg!);
+                AddImportedPart(root, "RightLeg", new Vector3(0.48f, 1.15f, 0), new Vector3(0, -0.65f, 0), new Vector3(0.85f, 1.55f, 0.85f), new Color(0.55f, 0.75f, 0.25f), sources.RightLeg!);
+                AddFace(root);
+                return root;
+            }
+
+            var whole = new Node3D { Name = "ObjWholeR6" };
+            foreach (var mesh in groups) whole.AddChild(mesh);
+            NormalizeWholeImported(whole);
+            ApplyClassicShaderToImported(whole, new Color(0.96f, 0.8f, 0.19f));
+            AddFace(whole);
+            return whole;
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"OBJ R6 failed: {ex.Message}");
+            return null;
+        }
     }
 
     private Node3D? CreateLocalR6Visual()
@@ -222,6 +263,167 @@ public partial class R6Character : CharacterBody3D
         yield return Path.Combine(exeDir, "assets", "r6", "r6.gltf");
         yield return Path.Combine(exeDir, "r6.gltf");
         yield return Path.Combine(OS.GetUserDataDir(), "r6.gltf");
+    }
+
+    private static string FindExternalObjR6()
+    {
+        var exeDir = Path.GetDirectoryName(OS.GetExecutablePath()) ?? Directory.GetCurrentDirectory();
+        foreach (var path in new[]
+        {
+            Path.Combine(exeDir, "assets", "r6", "r6.obj"),
+            Path.Combine(exeDir, "r6.obj"),
+            Path.Combine(OS.GetUserDataDir(), "r6.obj"),
+            @"C:\Users\Administrator\Downloads\assets (2)\r6.obj"
+        })
+        {
+            if (File.Exists(path)) return path;
+        }
+        return "";
+    }
+
+    private static Texture2D? LoadTextureFromFile(string path)
+    {
+        var image = new Image();
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        var err = ext == ".webp" ? image.LoadWebpFromBuffer(File.ReadAllBytes(path)) : image.LoadPngFromBuffer(File.ReadAllBytes(path));
+        return err == Error.Ok ? ImageTexture.CreateFromImage(image) : null;
+    }
+
+    private static List<MeshInstance3D> LoadObjGroups(string path, Texture2D? texture)
+    {
+        var vertices = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        var groups = new Dictionary<string, SurfaceTool>(StringComparer.OrdinalIgnoreCase);
+        var order = new List<string>();
+        var current = "mesh";
+
+        SurfaceTool ToolFor(string name)
+        {
+            name = string.IsNullOrWhiteSpace(name) ? "mesh" : name.Trim();
+            if (!groups.TryGetValue(name, out var tool))
+            {
+                tool = new SurfaceTool();
+                tool.Begin(Mesh.PrimitiveType.Triangles);
+                groups[name] = tool;
+                order.Add(name);
+            }
+            return tool;
+        }
+
+        foreach (var raw in File.ReadLines(path))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith("#")) continue;
+            if (line.StartsWith("o ") || line.StartsWith("g "))
+            {
+                current = line[2..].Trim();
+                continue;
+            }
+            if (line.StartsWith("v "))
+            {
+                var p = SplitObj(line);
+                if (p.Length >= 4) vertices.Add(new Vector3(ParseObjFloat(p[1]), ParseObjFloat(p[2]), ParseObjFloat(p[3])));
+                continue;
+            }
+            if (line.StartsWith("vt "))
+            {
+                var p = SplitObj(line);
+                if (p.Length >= 3) uvs.Add(new Vector2(ParseObjFloat(p[1]), 1f - ParseObjFloat(p[2])));
+                continue;
+            }
+            if (!line.StartsWith("f ")) continue;
+
+            var parts = SplitObj(line);
+            if (parts.Length < 4) continue;
+            var face = new ObjFaceVertex[parts.Length - 1];
+            for (var i = 1; i < parts.Length; i++) face[i - 1] = ParseFaceVertex(parts[i]);
+            for (var i = 1; i < face.Length - 1; i++)
+            {
+                AddObjVertex(ToolFor(current), face[0], vertices, uvs);
+                AddObjVertex(ToolFor(current), face[i], vertices, uvs);
+                AddObjVertex(ToolFor(current), face[i + 1], vertices, uvs);
+            }
+        }
+
+        var result = new List<MeshInstance3D>();
+        foreach (var name in order)
+        {
+            groups[name].GenerateNormals();
+            var mesh = groups[name].Commit();
+            if (mesh == null || mesh.GetSurfaceCount() == 0) continue;
+            var instance = new MeshInstance3D { Name = name, Mesh = mesh };
+            instance.MaterialOverride = ClassicPlastic.Material(Colors.White, texture);
+            result.Add(instance);
+        }
+        return result;
+    }
+
+    private static LocalR6Sources ClassifyObjGroups(List<MeshInstance3D> groups)
+    {
+        var sources = new LocalR6Sources();
+        var entries = new List<(MeshInstance3D Mesh, Vector3 Center)>();
+        foreach (var mesh in groups)
+        {
+            var aabb = mesh.Mesh?.GetAabb() ?? new Aabb();
+            entries.Add((mesh, aabb.Position + aabb.Size * 0.5f));
+        }
+        foreach (var entry in entries)
+        {
+            var name = entry.Mesh.Name.ToString().ToLowerInvariant();
+            if (name.Contains("head") || name.Contains("pyramid")) sources.Head = entry.Mesh;
+            else if (name.Contains("torso") || name.Contains("body")) sources.Torso = entry.Mesh;
+            else if (name.Contains("left") && name.Contains("arm")) sources.LeftArm = entry.Mesh;
+            else if (name.Contains("right") && name.Contains("arm")) sources.RightArm = entry.Mesh;
+            else if (name.Contains("left") && name.Contains("leg")) sources.LeftLeg = entry.Mesh;
+            else if (name.Contains("right") && name.Contains("leg")) sources.RightLeg = entry.Mesh;
+        }
+        if (!sources.HasCompleteRig && entries.Count >= 6)
+        {
+            entries.Sort((a, b) => a.Center.Y.CompareTo(b.Center.Y));
+            var legs = new List<(MeshInstance3D Mesh, Vector3 Center)> { entries[0], entries[1] };
+            legs.Sort((a, b) => a.Center.X.CompareTo(b.Center.X));
+            sources.LeftLeg = legs[0].Mesh;
+            sources.RightLeg = legs[1].Mesh;
+
+            var middle = new List<(MeshInstance3D Mesh, Vector3 Center)> { entries[2], entries[3], entries[4] };
+            middle.Sort((a, b) => a.Center.X.CompareTo(b.Center.X));
+            sources.LeftArm = middle[0].Mesh;
+            sources.Torso = middle[1].Mesh;
+            sources.RightArm = middle[2].Mesh;
+            sources.Head = entries[^1].Mesh;
+        }
+        return sources;
+    }
+
+    private static void NormalizeWholeImported(Node3D root)
+    {
+        var bounds = CombinedAabb(root);
+        if (bounds.Size.Y <= 0.001f) return;
+        var scale = 4.35f / bounds.Size.Y;
+        root.Scale = Vector3.One * scale;
+        root.Position = new Vector3(
+            -(bounds.Position.X + bounds.Size.X * 0.5f) * scale,
+            -bounds.Position.Y * scale + 0.1f,
+            -(bounds.Position.Z + bounds.Size.Z * 0.5f) * scale
+        );
+    }
+
+    private static string[] SplitObj(string line) => line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static float ParseObjFloat(string value) => float.Parse(value, CultureInfo.InvariantCulture);
+
+    private static ObjFaceVertex ParseFaceVertex(string token)
+    {
+        var pieces = token.Split('/');
+        var v = int.TryParse(pieces[0], out var vertex) ? vertex - 1 : -1;
+        var vt = pieces.Length > 1 && int.TryParse(pieces[1], out var uv) ? uv - 1 : -1;
+        return new ObjFaceVertex(v, vt);
+    }
+
+    private static void AddObjVertex(SurfaceTool tool, ObjFaceVertex fv, List<Vector3> vertices, List<Vector2> uvs)
+    {
+        if (fv.Uv >= 0 && fv.Uv < uvs.Count) tool.SetUV(uvs[fv.Uv]);
+        if (fv.Vertex >= 0 && fv.Vertex < vertices.Count) tool.AddVertex(vertices[fv.Vertex]);
     }
 
     private Node3D? CreateWholeImportedR6(Node3D imported, string sourcePath)
@@ -926,6 +1128,8 @@ public partial class R6Character : CharacterBody3D
         public byte[] Body = System.Array.Empty<byte>();
     }
 
+    private readonly record struct ObjFaceVertex(int Vertex, int Uv);
+
     private sealed class LocalR6Sources
     {
         public MeshInstance3D? Head;
@@ -970,7 +1174,7 @@ public partial class R6Character : CharacterBody3D
         var steppedSwing = Mathf.Abs(rawSwing) < 0.22f ? 0f : Mathf.Sign(rawSwing);
         var armAngle = animState == "walk" ? steppedSwing * 20f : 0f;
         var legAngle = animState == "walk" ? -steppedSwing * 18f : 0f;
-        if (animState == "jump") { armAngle = -30f; legAngle = 10f; }
+        if (animState == "jump") { armAngle = 72f; legAngle = 10f; }
         if (animState == "fall") { armAngle = 14f; legAngle = -6f; }
         RotatePart("LeftArm", new Vector3(armAngle, 0, 0));
         RotatePart("RightArm", new Vector3(-armAngle, 0, 0));
