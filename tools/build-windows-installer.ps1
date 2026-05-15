@@ -3,7 +3,9 @@ $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $outDir = Join-Path $root "public\download"
 $outExe = Join-Path $outDir "NovusLauncherSetup.exe"
+$protocolExe = Join-Path $outDir "NovusProtocolLauncher.exe"
 $source = Join-Path $PSScriptRoot "NovusLauncherSetupStub.cs"
+$protocolSource = Join-Path $PSScriptRoot "NovusProtocolLauncher.cs"
 $setupScript = Join-Path $root "launcher\NovusLauncherSetup.ps1"
 $icon = Join-Path $root "godot-client\assets\ui\novus_n.ico"
 $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -14,3 +16,7 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 & $csc /nologo /target:winexe /out:$outExe /win32icon:$icon /resource:$setupScript,NovusLauncherSetup.ps1 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll $source
 if (!(Test-Path $outExe)) { throw "csc did not create $outExe" }
 Write-Host "Created $outExe"
+
+& $csc /nologo /target:winexe /out:$protocolExe /win32icon:$icon /reference:System.Windows.Forms.dll /reference:System.Drawing.dll $protocolSource
+if (!(Test-Path $protocolExe)) { throw "csc did not create $protocolExe" }
+Write-Host "Created $protocolExe"

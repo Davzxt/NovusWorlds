@@ -102,14 +102,13 @@ function Find-ExeInFolder($folder, $name) {
   return ""
 }
 
-function Register-Protocol($scheme, $description, $protocolLauncherPath) {
+function Register-Protocol($scheme, $description, $protocolLauncherExe) {
   $base = "HKCU:\Software\Classes\$scheme"
   New-Item -Path $base -Force | Out-Null
   New-ItemProperty -Path $base -Name "(default)" -Value "URL:$description" -Force | Out-Null
   New-ItemProperty -Path $base -Name "URL Protocol" -Value "" -Force | Out-Null
   New-Item -Path "$base\shell\open\command" -Force | Out-Null
-  $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-  $command = '"' + $powershell + '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $protocolLauncherPath + '" "%1"'
+  $command = '"' + $protocolLauncherExe + '" "%1"'
   New-ItemProperty -Path "$base\shell\open\command" -Name "(default)" -Value $command -Force | Out-Null
 }
 
@@ -266,6 +265,7 @@ $install.Add_Click({
     Download-File "launch-hidden.vbs" $installDir | Out-Null
     Download-File "config.example.json" $installDir | Out-Null
     Download-File "README.md" $installDir | Out-Null
+    $protocolLauncherExe = Download-Package "NovusProtocolLauncher.exe" (Join-Path $installDir "NovusProtocolLauncher.exe")
     Log "Launcher baixado."
 
     $config = [ordered]@{
@@ -283,12 +283,11 @@ $install.Add_Click({
     Log "Config salvo: $configPath"
 
     $stepLabel.Text = "Etapa 3 de 3"
-    Register-Protocol "novus" "Novus Worlds Player" $protocolLauncherPath
-    Register-Protocol "novus-studio" "Novus Worlds Studio" $protocolLauncherPath
+    Register-Protocol "novus" "Novus Worlds Player" $protocolLauncherExe
+    Register-Protocol "novus-studio" "Novus Worlds Studio" $protocolLauncherExe
     Log "Protocolos registrados."
 
-    $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-    Create-Shortcut "Novus Worlds Launcher.lnk" $powershell ('-NoProfile -ExecutionPolicy Bypass -File "' + $protocolLauncherPath + '"') $installDir
+    Create-Shortcut "Novus Worlds Launcher.lnk" $protocolLauncherExe "" $installDir
     Create-Shortcut "Novus Worlds Studio.lnk" $studioBox.Text.Trim() "" (Split-Path $studioBox.Text.Trim())
     Create-Shortcut "Novus Worlds Client.lnk" $playerBox.Text.Trim() "" (Split-Path $playerBox.Text.Trim())
     Log "Atalhos criados na area de trabalho."
