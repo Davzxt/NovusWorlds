@@ -8,6 +8,21 @@
 #include <windowsx.h>
 
 namespace Novus {
+namespace {
+
+void NativeLog(const std::string& message) {
+  char localAppData[MAX_PATH]{};
+  DWORD length = GetEnvironmentVariableA("LOCALAPPDATA", localAppData, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) return;
+  const std::string root = std::string(localAppData) + "\\NovusWorlds";
+  const std::string dir = root + "\\Cache";
+  CreateDirectoryA(root.c_str(), nullptr);
+  CreateDirectoryA(dir.c_str(), nullptr);
+  std::ofstream out(dir + "\\native-app.log", std::ios::app);
+  if (out) out << message << "\n";
+}
+
+}
 
 std::wstring ToWide(const std::string& value) {
   if (value.empty()) return {};
@@ -69,13 +84,25 @@ ClassicApp::~ClassicApp() {
 }
 
 int ClassicApp::Run(HINSTANCE instance, int showCommand) {
+  NativeLog("App run start");
+  if (!instance) instance = GetModuleHandleW(nullptr);
   WNDCLASSW wc{};
   wc.lpfnWndProc = StaticWndProc;
   wc.hInstance = instance;
   wc.lpszClassName = L"NovusWorldsNativeWindow";
   wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+  wc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
   wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-  RegisterClassW(&wc);
+  ATOM klass = RegisterClassW(&wc);
+  if (!klass) {
+    const DWORD err = GetLastError();
+    if (err != ERROR_CLASS_ALREADY_EXISTS) {
+      NativeLog("RegisterClass failed: " + std::to_string(err));
+      MessageBoxW(nullptr, L"Nao foi possivel registrar a janela do Novus Worlds.", title_.c_str(), MB_OK | MB_ICONERROR);
+      return 1;
+    }
+    NativeLog("RegisterClass already exists");
+  }
 
   hwnd_ = CreateWindowExW(
     0,
@@ -91,27 +118,36 @@ int ClassicApp::Run(HINSTANCE instance, int showCommand) {
     instance,
     this);
 
-  if (!hwnd_) return 1;
+  if (!hwnd_) {
+    NativeLog("CreateWindowEx failed: " + std::to_string(GetLastError()));
+    MessageBoxW(nullptr, L"Nao foi possivel abrir a janela do Novus Worlds.", title_.c_str(), MB_OK | MB_ICONERROR);
+    return 1;
+  }
   ShowWindow(hwnd_, showCommand);
   UpdateWindow(hwnd_);
 
   if (!renderer_.Initialize(hwnd_)) {
+    NativeLog("Renderer initialize failed");
     MessageBoxW(hwnd_, L"Nao foi possivel iniciar o Direct3D9. Atualize o Windows/driver de video e tente novamente.", title_.c_str(), MB_OK | MB_ICONERROR);
     return 1;
   }
   try {
     if (!OnCreate()) {
+      NativeLog("OnCreate returned false");
       MessageBoxW(hwnd_, L"O aplicativo nao conseguiu iniciar.", title_.c_str(), MB_OK | MB_ICONERROR);
       return 1;
     }
   } catch (const std::exception& err) {
+    NativeLog(std::string("OnCreate exception: ") + err.what());
     MessageBoxW(hwnd_, ToWide(err.what()).c_str(), title_.c_str(), MB_OK | MB_ICONERROR);
     return 1;
   } catch (...) {
+    NativeLog("OnCreate unknown exception");
     MessageBoxW(hwnd_, L"Erro desconhecido ao iniciar o aplicativo.", title_.c_str(), MB_OK | MB_ICONERROR);
     return 1;
   }
 
+  NativeLog("App main loop");
   MSG msg{};
   auto previous = std::chrono::steady_clock::now();
   while (msg.message != WM_QUIT) {
@@ -144,6 +180,7 @@ LRESULT CALLBACK ClassicApp::StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam, L
   if (msg == WM_NCCREATE) {
     auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
     app = reinterpret_cast<ClassicApp*>(create->lpCreateParams);
+    if (app) app->hwnd_ = hwnd;
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app));
   }
   return app ? app->WndProc(msg, wParam, lParam) : DefWindowProcW(hwnd, msg, wParam, lParam);

@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <fstream>
 #include <functional>
+#include <string>
 #include <vector>
 
 namespace Novus {
@@ -18,6 +21,23 @@ D3DMATRIX Identity() {
   D3DMATRIX m{};
   m._11 = m._22 = m._33 = m._44 = 1.0f;
   return m;
+}
+
+std::string HexHr(HRESULT hr) {
+  char buffer[32]{};
+  std::snprintf(buffer, sizeof(buffer), "0x%08X", static_cast<unsigned int>(hr));
+  return buffer;
+}
+
+void RendererLog(const std::string& message) {
+  char localAppData[MAX_PATH]{};
+  DWORD length = GetEnvironmentVariableA("LOCALAPPDATA", localAppData, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) return;
+  const std::string dir = std::string(localAppData) + "\\NovusWorlds\\Cache";
+  CreateDirectoryA((std::string(localAppData) + "\\NovusWorlds").c_str(), nullptr);
+  CreateDirectoryA(dir.c_str(), nullptr);
+  std::ofstream out(dir + "\\native-renderer.log", std::ios::app);
+  if (out) out << message << "\n";
 }
 
 D3DMATRIX Multiply(const D3DMATRIX& a, const D3DMATRIX& b) {
@@ -149,30 +169,70 @@ bool RendererD3D9::Initialize(HWND hwnd) {
   width_ = std::max(1L, rc.right - rc.left);
   height_ = std::max(1L, rc.bottom - rc.top);
 
+  RendererLog("Renderer init start");
   d3d_ = Direct3DCreate9(D3D_SDK_VERSION);
-  if (!d3d_) return false;
+  if (!d3d_) {
+    RendererLog("Direct3DCreate9 failed");
+    return false;
+  }
+
+  D3DDISPLAYMODE displayMode{};
+  D3DFORMAT backBufferFormat = D3DFMT_UNKNOWN;
+  HRESULT modeHr = d3d_->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &displayMode);
+  if (SUCCEEDED(modeHr)) backBufferFormat = displayMode.Format;
 
   params_ = {};
   params_.Windowed = TRUE;
   params_.SwapEffect = D3DSWAPEFFECT_DISCARD;
-  params_.BackBufferFormat = D3DFMT_UNKNOWN;
-  params_.EnableAutoDepthStencil = TRUE;
-  params_.AutoDepthStencilFormat = D3DFMT_D24S8;
+  params_.BackBufferFormat = backBufferFormat;
   params_.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
   params_.BackBufferWidth = width_;
   params_.BackBufferHeight = height_;
+  params_.hDeviceWindow = hwnd_;
 
-  HRESULT hr = d3d_->CreateDevice(
-    D3DADAPTER_DEFAULT,
-    D3DDEVTYPE_HAL,
-    hwnd_,
+  const DWORD vertexModes[] = {
     D3DCREATE_HARDWARE_VERTEXPROCESSING,
-    &params_,
-    &device_);
-  if (FAILED(hr)) {
-    hr = d3d_->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hwnd_, D3DCREATE_SOFTWARE_VERTEXPROCESSING, &params_, &device_);
+    D3DCREATE_MIXED_VERTEXPROCESSING,
+    D3DCREATE_SOFTWARE_VERTEXPROCESSING
+  };
+  const D3DFORMAT depthFormats[] = {
+    D3DFMT_D24S8,
+    D3DFMT_D16,
+    D3DFMT_UNKNOWN
+  };
+  HRESULT lastHr = E_FAIL;
+  for (D3DFORMAT depth : depthFormats) {
+    params_.EnableAutoDepthStencil = depth != D3DFMT_UNKNOWN;
+    params_.AutoDepthStencilFormat = depth == D3DFMT_UNKNOWN ? D3DFMT_D16 : depth;
+    for (DWORD vertexMode : vertexModes) {
+      lastHr = d3d_->CreateDevice(
+        D3DADAPTER_DEFAULT,
+        D3DDEVTYPE_HAL,
+        hwnd_,
+        vertexMode,
+        &params_,
+        &device_);
+      RendererLog("CreateDevice HAL depth=" + std::to_string(static_cast<int>(depth)) + " vertex=" + std::to_string(vertexMode) + " hr=" + HexHr(lastHr));
+      if (SUCCEEDED(lastHr)) break;
+    }
+    if (device_) break;
   }
-  if (FAILED(hr)) return false;
+  if (!device_) {
+    params_.EnableAutoDepthStencil = FALSE;
+    params_.AutoDepthStencilFormat = D3DFMT_UNKNOWN;
+    lastHr = d3d_->CreateDevice(
+      D3DADAPTER_DEFAULT,
+      D3DDEVTYPE_REF,
+      hwnd_,
+      D3DCREATE_SOFTWARE_VERTEXPROCESSING,
+      &params_,
+      &device_);
+    RendererLog("CreateDevice REF hr=" + HexHr(lastHr));
+  }
+  if (!device_) {
+    RendererLog("Renderer init failed lastHr=" + HexHr(lastHr));
+    return false;
+  }
 
   device_->SetRenderState(D3DRS_ZENABLE, TRUE);
   device_->SetRenderState(D3DRS_LIGHTING, FALSE);
@@ -180,6 +240,7 @@ bool RendererD3D9::Initialize(HWND hwnd) {
   device_->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
   device_->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
   device_->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+  RendererLog("Renderer init ok");
   return true;
 }
 
