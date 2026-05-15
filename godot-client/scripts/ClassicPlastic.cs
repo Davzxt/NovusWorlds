@@ -4,7 +4,7 @@ public static class ClassicPlastic
 {
     private const string ShaderCode = """
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_draw_opaque;
+render_mode unshaded, cull_back, depth_draw_opaque;
 
 uniform vec4 albedo_color : source_color = vec4(0.95, 0.85, 0.35, 1.0);
 uniform sampler2D albedo_tex : source_color;
@@ -44,7 +44,7 @@ void fragment() {
     vec3 rim_contrib = specular_color.rgb * rim;
 
     ALBEDO = base.rgb + spec_contrib + rim_contrib;
-    ALPHA = albedo_color.a;
+    ALPHA = base.a;
 }
 """;
 

@@ -12,6 +12,29 @@ $studioExe = Join-Path $root "build\studio\NovusWorldsStudio.exe"
 if (!(Test-Path $clientExe) -or !(Test-Path $studioExe)) {
   throw "Godot export failed. Install Godot .NET export templates 4.6.2 first, then run this script again."
 }
+$download = Join-Path $root "public\download"
+New-Item -ItemType Directory -Force $download | Out-Null
+
+function Compress-WithRetry($sourceDir, $destination) {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  for ($i = 1; $i -le 5; $i++) {
+    try {
+      Start-Sleep -Milliseconds (350 * $i)
+      $temp = "$destination.tmp"
+      if (Test-Path $temp) { Remove-Item -Force $temp }
+      [System.IO.Compression.ZipFile]::CreateFromDirectory($sourceDir, $temp, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+      Move-Item -Force $temp $destination
+      return
+    } catch {
+      if ($i -eq 5) { throw }
+      Write-Warning "Zip retry $i for ${destination}: $($_.Exception.Message)"
+    }
+  }
+}
+
+Compress-WithRetry (Join-Path $root "build\client") (Join-Path $download "NovusWorldsClient-Windows.zip")
+Compress-WithRetry (Join-Path $root "build\studio") (Join-Path $download "NovusWorldsStudio-Windows.zip")
 Write-Host "Exported $clientExe"
 Write-Host "Exported $studioExe"
+Write-Host "Updated public\download Godot packages."
 

@@ -47,12 +47,20 @@ public static class MapBuilder
 
     private static void AddClassicTestParts(NovusMap map)
     {
-        map.Objects.Add(new NovusPart { Id = "brick-red-wall", Name = "Brick Wall", Position = new Vector3(16, 2, -12), Size = new Vector3(14, 4, 2), Color = new Color(0.75f, 0.12f, 0.08f), Material = "Plastic" });
-        map.Objects.Add(new NovusPart { Id = "blue-block", Name = "Blue Block", Position = new Vector3(-12, 2, 8), Size = new Vector3(6, 4, 6), Color = new Color(0.05f, 0.25f, 0.8f), Material = "Plastic" });
-        map.Objects.Add(new NovusPart { Id = "yellow-jump", Name = "Jump Pad", Position = new Vector3(0, 0.15f, 14), Size = new Vector3(8, 0.3f, 8), Color = new Color(1f, 0.83f, 0.12f), Material = "Plastic" });
-        map.Objects.Add(new NovusPart { Id = "stairs-1", Name = "Classic Step 1", Position = new Vector3(24, 0.5f, 12), Size = new Vector3(6, 1, 6), Color = new Color(0.45f, 0.25f, 0.12f), Material = "Plastic" });
-        map.Objects.Add(new NovusPart { Id = "stairs-2", Name = "Classic Step 2", Position = new Vector3(24, 1.5f, 18), Size = new Vector3(6, 1, 6), Color = new Color(0.45f, 0.25f, 0.12f), Material = "Plastic" });
-        map.Objects.Add(new NovusPart { Id = "stairs-3", Name = "Classic Step 3", Position = new Vector3(24, 2.5f, 24), Size = new Vector3(6, 1, 6), Color = new Color(0.45f, 0.25f, 0.12f), Material = "Plastic" });
+        map.Objects.Add(new NovusPart { Id = "road-x", Name = "Road X", Position = new Vector3(0, 0.04f, 0), Size = new Vector3(116, 0.12f, 12), Color = new Color(0.36f, 0.36f, 0.38f), Material = "Metal" });
+        map.Objects.Add(new NovusPart { Id = "road-z", Name = "Road Z", Position = new Vector3(0, 0.05f, 0), Size = new Vector3(12, 0.13f, 116), Color = new Color(0.36f, 0.36f, 0.38f), Material = "Metal" });
+        for (var i = -5; i <= 5; i++)
+        {
+            map.Objects.Add(new NovusPart { Id = $"stripe-x-{i}", Name = "Road Stripe", Position = new Vector3(i * 10, 0.14f, 0), Size = new Vector3(4.4f, 0.08f, 0.8f), Color = Colors.White, Material = "Plastic" });
+            map.Objects.Add(new NovusPart { Id = $"stripe-z-{i}", Name = "Road Stripe", Position = new Vector3(0, 0.15f, i * 10), Size = new Vector3(0.8f, 0.08f, 4.4f), Color = Colors.White, Material = "Plastic" });
+        }
+        map.Objects.Add(new NovusPart { Id = "red-spawn-pad", Name = "Spawn Pad", Position = new Vector3(0, 0.3f, 18), Size = new Vector3(8, 0.6f, 8), Color = new Color(0.9f, 0.12f, 0.08f), Material = "Brick" });
+        map.Objects.Add(new NovusPart { Id = "blue-water", Name = "Classic Water", Position = new Vector3(-34, 0.06f, -32), Size = new Vector3(24, 0.12f, 18), Color = new Color(0.05f, 0.38f, 0.75f, 0.82f), Material = "Glass", Transparency = 0.22f });
+        map.Objects.Add(new NovusPart { Id = "brown-house", Name = "Brown Block House", Position = new Vector3(28, 3, -24), Size = new Vector3(14, 6, 12), Color = new Color(0.43f, 0.23f, 0.12f), Material = "Wood" });
+        map.Objects.Add(new NovusPart { Id = "brown-house-roof", Name = "House Roof", Position = new Vector3(28, 7.4f, -24), Size = new Vector3(16, 2, 14), Color = new Color(0.23f, 0.2f, 0.18f), Material = "Wood" });
+        map.Objects.Add(new NovusPart { Id = "tower-a", Name = "Stud Tower A", Position = new Vector3(-36, 12, 26), Size = new Vector3(10, 24, 10), Color = new Color(0.55f, 0.57f, 0.55f), Material = "Stone" });
+        map.Objects.Add(new NovusPart { Id = "tower-b", Name = "Stud Tower B", Position = new Vector3(-22, 17, 30), Size = new Vector3(9, 34, 9), Color = new Color(0.62f, 0.64f, 0.62f), Material = "Stone" });
+        map.Objects.Add(new NovusPart { Id = "jump-pad", Name = "Jump Pad", Position = new Vector3(20, 0.25f, 18), Size = new Vector3(8, 0.5f, 8), Color = new Color(1f, 0.86f, 0.08f), Material = "Plastic" });
     }
 
     private static void AddSurfaceTiles(Node3D body, NovusPart part, Color displayColor)
@@ -95,7 +103,7 @@ public static class MapBuilder
 
     private static Vector2 TextureScaleFor(NovusPart part)
     {
-        var tileStuds = 2f;
+        var tileStuds = 1f;
         return new Vector2(
             Mathf.Max(1f, part.Size.X / tileStuds),
             Mathf.Max(1f, part.Size.Z / tileStuds)

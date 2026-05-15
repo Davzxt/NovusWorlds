@@ -11,7 +11,7 @@ public partial class ClientMain : Node3D
     private Camera3D camera = null!;
     private readonly Dictionary<string, Node3D> remotePlayers = new();
     private float yaw = 35f;
-    private float pitch = -18f;
+    private float pitch = 18f;
     private double netClock;
     private int moveTouchId = -1;
     private int cameraTouchId = -1;
@@ -26,7 +26,7 @@ public partial class ClientMain : Node3D
     private readonly HashSet<string> knownPlayers = new();
     private readonly Dictionary<string, string> playerNames = new();
     private double uiClock;
-    private float cameraDistance = 12f;
+    private float cameraDistance = 15f;
     private bool rotatingCamera;
     private bool firstPerson;
     private bool shiftLock;
@@ -116,15 +116,15 @@ public partial class ClientMain : Node3D
             if (mouseButton.ButtonIndex == MouseButton.Right) rotatingCamera = mouseButton.Pressed;
             if (mouseButton.Pressed && mouseButton.ButtonIndex == MouseButton.WheelUp)
             {
-                cameraDistance = Mathf.Max(6f, cameraDistance - 1.2f);
-                firstPerson = cameraDistance <= 6.05f;
+                cameraDistance = Mathf.Max(0.45f, cameraDistance - 1.35f);
+                firstPerson = cameraDistance <= 1.05f;
                 UpdateCameraMode();
                 PlayClick();
             }
             if (mouseButton.Pressed && mouseButton.ButtonIndex == MouseButton.WheelDown)
             {
-                cameraDistance = Mathf.Min(28f, cameraDistance + 1.2f);
-                if (cameraDistance > 6.05f) firstPerson = false;
+                cameraDistance = Mathf.Min(34f, cameraDistance + 1.35f);
+                if (cameraDistance > 1.05f) firstPerson = false;
                 UpdateCameraMode();
                 PlayClick();
             }
@@ -132,7 +132,7 @@ public partial class ClientMain : Node3D
         else if (ev is InputEventMouseMotion motion && (rotatingCamera || firstPerson || shiftLock) && chatInput?.HasFocus() != true)
         {
             yaw -= motion.Relative.X * 0.18f;
-            pitch = Mathf.Clamp(pitch - motion.Relative.Y * 0.18f, firstPerson ? -72f : -18f, firstPerson ? 72f : 68f);
+            pitch = Mathf.Clamp(pitch - motion.Relative.Y * 0.18f, firstPerson ? -72f : -35f, firstPerson ? 72f : 78f);
         }
         else if (ev is InputEventKey key && key.Pressed)
         {
@@ -180,7 +180,7 @@ public partial class ClientMain : Node3D
             else if (drag.Index == cameraTouchId)
             {
                 yaw -= drag.Relative.X * 0.18f;
-                pitch = Mathf.Clamp(pitch - drag.Relative.Y * 0.18f, firstPerson ? -72f : -18f, firstPerson ? 72f : 68f);
+                pitch = Mathf.Clamp(pitch - drag.Relative.Y * 0.18f, firstPerson ? -72f : -35f, firstPerson ? 72f : 78f);
             }
         }
     }
@@ -201,9 +201,9 @@ public partial class ClientMain : Node3D
             else
             {
                 var horizontal = Mathf.Cos(pitchRad) * cameraDistance;
-                var offset = new Vector3(Mathf.Sin(yawRad) * horizontal, Mathf.Sin(pitchRad) * cameraDistance + 1.2f, Mathf.Cos(yawRad) * horizontal);
-                camera.GlobalPosition = camera.GlobalPosition.Lerp(player.GlobalPosition + offset, 0.35f);
-                camera.LookAt(player.GlobalPosition + Vector3.Up * 2f);
+                var offset = new Vector3(Mathf.Sin(yawRad) * horizontal, Mathf.Sin(pitchRad) * cameraDistance + 1.55f, Mathf.Cos(yawRad) * horizontal);
+                camera.GlobalPosition = camera.GlobalPosition.Lerp(player.GlobalPosition + offset, 0.42f);
+                camera.LookAt(player.GlobalPosition + Vector3.Up * 2.15f);
             }
             player.SetLocalVisualHidden(firstPerson);
             if (skyboxRoot != null) skyboxRoot.GlobalPosition = camera.GlobalPosition;
@@ -647,17 +647,38 @@ public partial class ClientMain : Node3D
         };
         root.AddChild(centerReticle);
 
-        topBar = new Control { Name = "Classic2011Controls", Size = new Vector2(190, 86) };
+        topBar = Panel(Vector2.Zero, new Vector2(560, 24), new Color(0.76f, 0.78f, 0.79f, 0.9f));
+        topBar.Name = "Classic2011TopMenu";
         root.AddChild(topBar);
-        AddTopButton("Lock Mouse", 0, 0, 146, () =>
+        topBar.AddChild(new Label
+        {
+            Text = "Novus Worlds",
+            Position = new Vector2(8, 2),
+            Size = new Vector2(164, 20),
+            Modulate = Colors.White
+        });
+        AddTopButton("Reset", 176, 0, 78, () =>
+        {
+            RespawnPlayer(false, true);
+            PlayClick();
+        });
+        AddTopButton("Fullscreen", 254, 0, 104, () =>
+        {
+            ToggleFullscreen();
+            PlayClick();
+        });
+        AddTopButton("Help", 358, 0, 70, () =>
+        {
+            AddChatLine("WASD move, right mouse rotates camera, mouse wheel zooms, / opens chat.");
+            PlayClick();
+        });
+        AddTopButton("Exit", 428, 0, 66, () => { PlayClick(); GetTree().Quit(); });
+        AddTopButton("Lock Mouse", 494, 0, 112, () =>
         {
             shiftLock = !shiftLock;
             UpdateCameraMode();
             PlayClick();
         });
-        AddTopButton("Leave", 0, 42, 58, () => { PlayClick(); GetTree().Quit(); });
-        AddTopButton("Menu", 68, 42, 44, () => { AddChatLine("WASD move, right mouse rotates camera, mouse wheel zooms, / opens chat."); PlayClick(); });
-        AddTopButton("Gear", 122, 42, 44, () => { PlayClick(); });
 
         healthPanel = Panel(Vector2.Zero, new Vector2(176, 24), new Color(0f, 0f, 0f, 0.68f));
         root.AddChild(healthPanel);
@@ -677,11 +698,13 @@ public partial class ClientMain : Node3D
         root.AddChild(inventoryPanel);
         BuildInventory();
 
-        chatPanel = new Control { Position = new Vector2(8, 28), Size = new Vector2(520, 136) };
+        chatPanel = Panel(new Vector2(8, 28), new Vector2(520, 136), new Color(0.08f, 0.09f, 0.1f, 0.34f));
         root.AddChild(chatPanel);
-        chatLog = new RichTextLabel { Position = Vector2.Zero, Size = new Vector2(520, 112), BbcodeEnabled = false, ScrollActive = true, Modulate = Colors.White };
+        chatLog = new RichTextLabel { Position = new Vector2(6, 4), Size = new Vector2(508, 126), BbcodeEnabled = false, ScrollActive = true, Modulate = Colors.White };
+        chatLog.AddThemeFontSizeOverride("normal_font_size", 15);
         chatPanel.AddChild(chatLog);
         chatInput = new LineEdit { PlaceholderText = "To chat click here or press the / key", Position = new Vector2(8, 690), Size = new Vector2(520, 24) };
+        chatInput.AddThemeFontSizeOverride("font_size", 14);
         chatInput.TextSubmitted += SendChatMessage;
         root.AddChild(chatInput);
         AddChatLine("Bem-vindo ao Novus Worlds.");
@@ -690,28 +713,38 @@ public partial class ClientMain : Node3D
 
     private void AddTopButton(string text, float x, float y, float width, Action action)
     {
-        var button = new Button { Text = text, Position = new Vector2(x, y), Size = new Vector2(width, 34), FocusMode = Control.FocusModeEnum.None };
+        var button = new Button { Text = text, Position = new Vector2(x, y), Size = new Vector2(width, 24), FocusMode = Control.FocusModeEnum.None };
         var normal = new StyleBoxFlat
         {
-            BgColor = new Color(0.08f, 0.08f, 0.08f, 0.48f),
-            BorderColor = new Color(0.78f, 0.78f, 0.78f, 0.42f),
+            BgColor = new Color(0.74f, 0.74f, 0.74f, 0.0f),
+            BorderColor = new Color(0.62f, 0.62f, 0.62f, 0.0f),
             BorderWidthBottom = 1,
             BorderWidthLeft = 1,
             BorderWidthRight = 1,
             BorderWidthTop = 1,
-            CornerRadiusBottomLeft = 3,
-            CornerRadiusBottomRight = 3,
-            CornerRadiusTopLeft = 3,
-            CornerRadiusTopRight = 3
+            CornerRadiusBottomLeft = 0,
+            CornerRadiusBottomRight = 0,
+            CornerRadiusTopLeft = 0,
+            CornerRadiusTopRight = 0
         };
         var hover = (StyleBoxFlat)normal.Duplicate();
-        hover.BgColor = new Color(0.16f, 0.16f, 0.16f, 0.68f);
+        hover.BgColor = new Color(0.9f, 0.9f, 0.9f, 0.72f);
+        hover.BorderColor = new Color(0.42f, 0.42f, 0.42f, 0.6f);
         button.AddThemeStyleboxOverride("normal", normal);
         button.AddThemeStyleboxOverride("hover", hover);
         button.AddThemeStyleboxOverride("pressed", hover);
-        button.AddThemeColorOverride("font_color", Colors.White);
+        button.AddThemeColorOverride("font_color", new Color(0.04f, 0.04f, 0.04f));
+        button.AddThemeColorOverride("font_hover_color", new Color(0.04f, 0.04f, 0.04f));
         button.Pressed += action;
         topBar.AddChild(button);
+    }
+
+    private static void ToggleFullscreen()
+    {
+        var current = DisplayServer.WindowGetMode();
+        DisplayServer.WindowSetMode(current == DisplayServer.WindowMode.Fullscreen
+            ? DisplayServer.WindowMode.Windowed
+            : DisplayServer.WindowMode.Fullscreen);
     }
 
     private void SetupMobileHud()
@@ -793,8 +826,12 @@ public partial class ClientMain : Node3D
     private void LayoutHud()
     {
         var size = GetViewport().GetVisibleRect().Size;
-        if (topBar != null) topBar.Position = new Vector2(4, size.Y - 88);
-        if (playerListPanel != null) playerListPanel.Position = new Vector2(size.X - 340, 8);
+        if (topBar != null)
+        {
+            topBar.Position = Vector2.Zero;
+            topBar.Size = new Vector2(size.X, 24);
+        }
+        if (playerListPanel != null) playerListPanel.Position = new Vector2(size.X - 340, 40);
         if (healthPanel != null) healthPanel.Position = new Vector2(size.X * 0.5f - 88, size.Y - 31);
         if (inventoryPanel != null) inventoryPanel.Position = new Vector2(size.X * 0.5f - inventoryPanel.Size.X * 0.5f, size.Y - 86);
         if (chatInput != null) chatInput.Position = new Vector2(4, size.Y - 25);

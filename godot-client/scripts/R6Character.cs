@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 
 public partial class R6Character : CharacterBody3D
 {
-    [Export] public float WalkSpeed = 7.2f;
-    [Export] public float JumpVelocity = 8.15f;
+    [Export] public float WalkSpeed = 8.6f;
+    [Export] public float JumpVelocity = 9.35f;
     [Export] public bool IsRemote;
 
     public Vector2 MobileMove { get; set; }
@@ -161,7 +161,7 @@ public partial class R6Character : CharacterBody3D
 
     private Node3D CreateVisual()
     {
-        return CreateObjR6Visual() ?? CreateLocalR6Visual() ?? CreatePyramidR6Visual();
+        return CreateLocalR6Visual() ?? CreateObjR6Visual() ?? CreatePyramidR6Visual();
     }
 
     private Node3D? CreateObjR6Visual()
@@ -840,12 +840,12 @@ public partial class R6Character : CharacterBody3D
     {
         var node = visual.FindChild(name, true, false);
         if (node is MeshInstance3D mesh)
-            mesh.MaterialOverride = ClassicPlastic.Material(color);
+            mesh.MaterialOverride = ClassicPlastic.Material(color, ExtractAlbedoTexture(mesh));
         else if (node is Node3D root)
         {
             foreach (var child in root.GetChildren())
                 if (child is MeshInstance3D childMesh && childMesh.Name == $"{name}Mesh")
-                    childMesh.MaterialOverride = ClassicPlastic.Material(color);
+                    childMesh.MaterialOverride = ClassicPlastic.Material(color, ExtractAlbedoTexture(childMesh));
         }
     }
 
@@ -1170,12 +1170,13 @@ public partial class R6Character : CharacterBody3D
     private void AnimateClassic(float delta)
     {
         animClock += delta;
-        var rawSwing = Mathf.Sin(animClock * (animState == "walk" ? 8.1f : 2.5f));
-        var leftArmAngle = animState == "walk" ? rawSwing * 34f : 0f;
-        var rightArmAngle = animState == "walk" ? -rawSwing * 34f : 0f;
-        var legAngle = animState == "walk" ? -rawSwing * 28f : 0f;
-        if (animState == "jump") { leftArmAngle = -118f; rightArmAngle = -118f; legAngle = 12f; }
-        if (animState == "fall") { leftArmAngle = -34f; rightArmAngle = -34f; legAngle = -8f; }
+        var rawSwing = Mathf.Sin(animClock * (animState == "walk" ? 9.25f : 2.5f));
+        var steppedSwing = Mathf.Round(rawSwing * 4f) / 4f;
+        var leftArmAngle = animState == "walk" ? steppedSwing * 42f : 0f;
+        var rightArmAngle = animState == "walk" ? -steppedSwing * 42f : 0f;
+        var legAngle = animState == "walk" ? -steppedSwing * 36f : 0f;
+        if (animState == "jump") { leftArmAngle = -132f; rightArmAngle = -132f; legAngle = 10f; }
+        if (animState == "fall") { leftArmAngle = -38f; rightArmAngle = -38f; legAngle = -10f; }
         RotatePart("LeftArm", new Vector3(leftArmAngle, 0, 0));
         RotatePart("RightArm", new Vector3(rightArmAngle, 0, 0));
         RotatePart("LeftLeg", new Vector3(legAngle, 0, 0));
