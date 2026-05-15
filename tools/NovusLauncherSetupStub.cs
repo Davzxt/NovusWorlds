@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Net;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace NovusWorldsSetup
@@ -13,13 +13,17 @@ namespace NovusWorldsSetup
         {
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
-                string url = "https://raw.githubusercontent.com/Davzxt/NovusWorlds/main/launcher/NovusLauncherSetup.ps1";
                 string script = Path.Combine(Path.GetTempPath(), "NovusLauncherSetup.ps1");
-                using (var web = new WebClient())
+                using (var input = Assembly.GetExecutingAssembly().GetManifestResourceStream("NovusLauncherSetup.ps1"))
                 {
-                    web.Headers.Add("User-Agent", "NovusWorldsSetup/1.0");
-                    web.DownloadFile(url, script);
+                    if (input == null)
+                    {
+                        throw new InvalidOperationException("Installer resource NovusLauncherSetup.ps1 was not embedded.");
+                    }
+                    using (var output = File.Create(script))
+                    {
+                        input.CopyTo(output);
+                    }
                 }
 
                 var start = new ProcessStartInfo

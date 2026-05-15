@@ -3,8 +3,15 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$rawBase = "https://raw.githubusercontent.com/Davzxt/NovusWorlds/main/launcher"
-$repoDownloadBase = "https://github.com/Davzxt/NovusWorlds/raw/main/public/download"
+$siteDownloadBase = "https://novusworlds.onrender.com/download"
+$launcherBases = @(
+  "$siteDownloadBase/launcher",
+  "https://raw.githubusercontent.com/Davzxt/NovusWorlds/main/launcher"
+)
+$packageBases = @(
+  $siteDownloadBase,
+  "https://github.com/Davzxt/NovusWorlds/raw/main/public/download"
+)
 $defaultInstallDir = Join-Path $env:LOCALAPPDATA "NovusWorlds\Launcher"
 $defaultCacheDir = Join-Path $env:LOCALAPPDATA "NovusWorlds\Cache"
 $defaultClientRoot = Join-Path $env:LOCALAPPDATA "NovusWorlds\Client"
@@ -47,15 +54,40 @@ function Pick-Folder($targetBox) {
   }
 }
 
-function Download-File($name, $installDir) {
-  $target = Join-Path $installDir $name
-  Invoke-WebRequest -Uri "$rawBase/$name" -OutFile $target
-  return $target
+function Download-Url($url, $target) {
+  New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+  if (Test-Path $target) { Remove-Item -Force $target }
+  $headers = @{ "User-Agent" = "NovusWorldsSetup/1.0" }
+  try {
+    Invoke-WebRequest -Uri $url -OutFile $target -UseBasicParsing -Headers $headers -TimeoutSec 90
+    if ((Test-Path $target) -and ((Get-Item $target).Length -gt 0)) { return $target }
+  } catch {
+    $firstError = $_.Exception.Message
+  }
+
+  $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+  if ($curl) {
+    & $curl.Source -L --ssl-no-revoke --fail --silent --show-error --output $target $url
+    if ($LASTEXITCODE -eq 0 -and (Test-Path $target) -and ((Get-Item $target).Length -gt 0)) { return $target }
+  }
+  throw "Falha ao baixar $url. $firstError"
 }
 
-function Download-Package($url, $target) {
-  Invoke-WebRequest -Uri $url -OutFile $target
-  return $target
+function Download-File($name, $installDir) {
+  $target = Join-Path $installDir $name
+  $errors = @()
+  foreach ($base in $launcherBases) {
+    try { return Download-Url "$base/$name" $target } catch { $errors += $_.Exception.Message }
+  }
+  throw "Nao foi possivel baixar $name.`r`n$($errors -join "`r`n")"
+}
+
+function Download-Package($name, $target) {
+  $errors = @()
+  foreach ($base in $packageBases) {
+    try { return Download-Url "$base/$name" $target } catch { $errors += $_.Exception.Message }
+  }
+  throw "Nao foi possivel baixar $name.`r`n$($errors -join "`r`n")"
 }
 
 function Expand-Package($zip, $targetDir) {
@@ -209,7 +241,7 @@ $install.Add_Click({
     $shouldRefreshClient = (-not $playerPath) -or (Is-InsideFolder $playerPath $defaultClientRoot)
     if ($shouldRefreshClient -or -not (Test-Path $playerPath)) {
       Log "Baixando/atualizando Novus Client Windows..."
-      $clientZip = Download-Package "$repoDownloadBase/NovusWorldsClient-Windows.zip" (Join-Path $temp "NovusWorldsClient-Windows.zip")
+      $clientZip = Download-Package "NovusWorldsClient-Windows.zip" (Join-Path $temp "NovusWorldsClient-Windows.zip")
       Expand-Package $clientZip $defaultClientRoot
       $clientExe = Find-ExeInFolder $defaultClientRoot "NovusWorldsClient.exe"
       if (-not $clientExe) { throw "Client baixado, mas NovusWorldsClient.exe nao foi encontrado." }
@@ -221,7 +253,7 @@ $install.Add_Click({
     $shouldRefreshStudio = (-not $studioPath) -or (Is-InsideFolder $studioPath $defaultStudioRoot)
     if ($shouldRefreshStudio -or -not (Test-Path $studioPath)) {
       Log "Baixando/atualizando Novus Studio Windows..."
-      $studioZip = Download-Package "$repoDownloadBase/NovusWorldsStudio-Windows.zip" (Join-Path $temp "NovusWorldsStudio-Windows.zip")
+      $studioZip = Download-Package "NovusWorldsStudio-Windows.zip" (Join-Path $temp "NovusWorldsStudio-Windows.zip")
       Expand-Package $studioZip $defaultStudioRoot
       $studioExe = Find-ExeInFolder $defaultStudioRoot "NovusWorldsStudio.exe"
       if (-not $studioExe) { throw "Studio baixado, mas NovusWorldsStudio.exe nao foi encontrado." }
