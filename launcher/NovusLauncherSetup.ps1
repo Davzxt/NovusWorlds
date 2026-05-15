@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -150,9 +151,8 @@ if (!(Test-Path $defaultStudioDir)) { $defaultStudioDir = "" }
 $studioBox = Add-TextBox $form $defaultStudioDir 26 254 500
 $studioBrowse = Add-Button $form "Procurar" 535 252 105 28
 
-$openDownloads = Add-Button $form "Abrir downloads" 26 300 190 32
-$install = Add-Button $form "Instalar agora" 230 300 210 32
-$close = Add-Button $form "Fechar" 455 300 90 32
+$install = Add-Button $form "Instalar agora" 26 300 210 32
+$close = Add-Button $form "Fechar" 250 300 90 32
 
 $status = New-Object System.Windows.Forms.TextBox
 $status.Location = New-Object System.Drawing.Point(26, 350)
@@ -181,7 +181,6 @@ function Log($text) {
 $installBrowse.Add_Click({ Pick-Folder $installBox })
 $playerBrowse.Add_Click({ Pick-Exe "Escolha NovusWorldsClient.exe" $playerBox })
 $studioBrowse.Add_Click({ Pick-Exe "Escolha NovusWorldsStudio.exe" $studioBox })
-$openDownloads.Add_Click({ Start-Process "https://github.com/Davzxt/NovusWorlds/raw/main/public/download/NovusWorldsClient-Windows.zip" })
 $close.Add_Click({ $form.Close() })
 
 $form.Add_Shown({

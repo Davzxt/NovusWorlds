@@ -13,10 +13,12 @@ namespace NovusWorldsSetup
         {
             try
             {
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
                 string url = "https://raw.githubusercontent.com/Davzxt/NovusWorlds/main/launcher/NovusLauncherSetup.ps1";
                 string script = Path.Combine(Path.GetTempPath(), "NovusLauncherSetup.ps1");
                 using (var web = new WebClient())
                 {
+                    web.Headers.Add("User-Agent", "NovusWorldsSetup/1.0");
                     web.DownloadFile(url, script);
                 }
 
