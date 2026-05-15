@@ -1,7 +1,7 @@
 {
   "name": "novus-worlds-launcher",
   "version": "0.1.0",
-  "description": "Local protocol launcher for Novus Worlds Godot client and studio.",
+  "description": "Local protocol launcher for Novus Worlds native client and studio.",
   "main": "launcher.js",
   "scripts": {
     "start": "node launcher.js",

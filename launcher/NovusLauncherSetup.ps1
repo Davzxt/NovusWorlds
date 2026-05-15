@@ -130,7 +130,7 @@ $form.Font = New-Object System.Drawing.Font("Verdana", 9)
 $title = Add-Label $form "Novus Worlds Launcher" 24 18 620 30
 $title.Font = New-Object System.Drawing.Font("Verdana", 16, [System.Drawing.FontStyle]::Bold)
 $title.ForeColor = [System.Drawing.Color]::FromArgb(20, 80, 150)
-Add-Label $form "Configure a ponte local para abrir jogos e Studio pelo Novus Client Godot. O instalador baixa e atualiza o Client/Studio automaticamente." 26 54 610 38 | Out-Null
+Add-Label $form "Configure a ponte local para abrir jogos e Studio pelo Novus Client nativo. O instalador baixa e atualiza o Client/Studio automaticamente." 26 54 610 38 | Out-Null
 
 Add-Label $form "Pasta de instalacao" 26 108 200 20 | Out-Null
 $installBox = Add-TextBox $form $defaultInstallDir 26 130 500
@@ -238,8 +238,8 @@ $install.Add_Click({
       studioExe = $studioBox.Text.Trim()
       cacheDir = $defaultCacheDir
       launchMode = "live"
-      godotServerHost = "127.0.0.1"
-      godotServerPort = 53640
+      realtimeHost = "127.0.0.1"
+      realtimePort = 53640
       playerArgs = @("auto")
       studioArgs = @("auto")
     }

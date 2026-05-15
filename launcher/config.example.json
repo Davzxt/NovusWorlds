@@ -3,8 +3,8 @@
   "studioExe": "%LOCALAPPDATA%\\\\NovusWorlds\\\\Studio\\\\NovusWorldsStudio.exe",
   "cacheDir": "%LOCALAPPDATA%\\\\NovusWorlds\\\\Cache",
   "launchMode": "live",
-  "godotServerHost": "127.0.0.1",
-  "godotServerPort": 53640,
+  "realtimeHost": "127.0.0.1",
+  "realtimePort": 53640,
   "playerArgs": ["auto"],
   "studioArgs": ["auto"]
 }

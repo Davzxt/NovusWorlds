@@ -13,25 +13,24 @@
     <section class="panel legacy-launch">
       <div class="legacy-card">
         <h1>Novus Client e Studio</h1>
-        <p>O novo client e o novo Studio sao feitos em Godot/C# e usam o site como ponte para jogos, avatar, catalogo e mapas.</p>
+        <p>O novo Client e o novo Studio sao apps nativos em C++/Direct3D9. O site continua sendo a ponte para jogos, avatar, catalogo e mapas.</p>
         <div class="legacy-actions">
           <a class="btn" href="/download/NovusWorldsClient-Windows.zip" download>Baixar Client Windows</a>
           <a class="btn secondary" href="/download/NovusWorldsStudio-Windows.zip" download>Baixar Studio Windows</a>
           <a class="btn" href="/download/launcher/Install-NovusWorlds.cmd" download>Instalador Automatico</a>
           <a class="btn secondary" href="/download/launcher/NovusLauncherSetup.ps1" download>Baixar Launcher</a>
-          <a class="btn secondary" href="/download/NovusGodotProjects.zip" download>Projetos Godot</a>
           <a class="btn secondary" href="/templates/NVX-Storm-Island.nwm" download>Template NVX Storm Island</a>
           <a class="btn secondary" href="/studio.html">Abrir Studio</a>
         </div>
-        <p class="muted">Os zips Windows contem os executaveis exportados e as pastas de dados necessarias do Godot/.NET. Extraia a pasta inteira antes de abrir.</p>
+        <p class="muted">Os zips Windows contem os executaveis nativos. Extraia a pasta inteira antes de abrir.</p>
         <h2>Como usar</h2>
         <ol>
           <li>Baixe e abra <code>Install-NovusWorlds.cmd</code>.</li>
           <li>O instalador baixa Client e Studio, instala em <code>%LOCALAPPDATA%\NovusWorlds</code>, registra <code>novus://</code> e cria atalhos na area de trabalho.</li>
           <li>Depois disso, clique em <code>Jogar</code> na pagina de um jogo para abrir automaticamente com ticket.</li>
-          <li>Rode <code>godot-server</code> ou o servidor dedicado exportado para multiplayer pequeno.</li>
-          <li>Use <code>npm run godot:export:windows</code> para regerar os executaveis Windows.</li>
-          <li>Use <code>npm run godot:export:android</code> para tentar o APK Android quando o export C# Android estiver liberado no ambiente.</li>
+          <li>O multiplayer pequeno usa o WebSocket do site em <code>/ws/game/:gameId</code>.</li>
+          <li>Use <code>npm run native:build</code> para compilar os executaveis Windows.</li>
+          <li>Use <code>npm run native:package</code> para atualizar os downloads do site.</li>
         </ol>
         <details>
           <summary>Arquivos manuais</summary>
@@ -40,8 +39,8 @@
       </div>
       <aside class="legacy-note">
         <h2>Importante</h2>
-        <p>O site usa somente o client proprio em Godot. O launcher abre o Player com ticket temporario, mapa JSON, avatar R6 e dados de servidor.</p>
-        <p>Para Android, o client ja tem preset, controles touch, SDK/JDK/NDK documentados e script de export. O Godot 4.6.2 .NET ainda marca Android/C# como experimental e bloqueou o APK neste ambiente.</p>
+        <p>O site usa o Client nativo. O launcher abre o Player com ticket temporario, mapa JSON, avatar R6 e dados de servidor.</p>
+        <p>O alvo oficial desta etapa e Windows x64. Android fica fora ate o motor nativo estabilizar.</p>
       </aside>
     </section>
   </main>

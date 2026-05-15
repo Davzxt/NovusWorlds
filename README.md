@@ -1,6 +1,6 @@
 # Novus Worlds
 
-Novus Worlds e uma plataforma retro inspirada em jogos sociais de 2008. Inclui site, auth, catalogo, avatar R6, painel admin, SQLite e uma nova base nativa em Godot/C# para client, studio e servidor multiplayer dedicado.
+Novus Worlds e uma plataforma retro inspirada em jogos sociais classicos. Inclui site, auth, catalogo, avatar R6, painel admin, SQLite e uma nova engine nativa em C++/Direct3D9 para Client e Studio estilo 2011.
 
 ## Rodar localmente
 
@@ -62,59 +62,50 @@ O fluxo automatico usa ticket temporario:
 
 Modo facil: baixe `Install-NovusWorlds.cmd` em `/download.html`. Ele baixa o launcher, abre o instalador com PowerShell liberado, instala Client e Studio automaticamente em `%LOCALAPPDATA%\NovusWorlds`, registra os protocolos e cria atalhos na area de trabalho.
 
-Variaveis opcionais para o ticket do client Godot:
+Variaveis opcionais para o ticket do client nativo:
 
-- `NOVUS_GODOT_HOST`: host do servidor Godot ENet.
-- `NOVUS_GODOT_PORT`: porta do servidor Godot ENet, padrao `53640`.
+- `NOVUS_REALTIME_HOST`: host mostrado no ticket de realtime.
+- `NOVUS_REALTIME_PORT`: porta mostrada no ticket de realtime.
 
-Importante: o servidor Godot atual usa ENet/UDP. Render Web Service gratuito e bom para o site e WebSocket do navegador, mas normalmente nao expõe UDP publico para ENet. Para multiplayer do client nativo pela internet, use um host com UDP liberado ou troque o transporte do client Godot para WebSocket.
+Importante: o caminho novo usa o WebSocket do proprio Express para multiplayer pequeno. Render Web Service gratuito serve para alpha pequeno, mas nao para muitos jogadores reais.
 
-## Client, Studio e Server Godot
+## Engine nativa C++/Direct3D9
 
-O client e o Studio agora sao projetos proprios em Godot .NET:
-
-```text
-godot-client/  Player nativo, carrega mapa da API, usa r6.gltf e conecta no servidor Godot
-godot-studio/  Editor nativo separado para criar partes, spawn e salvar mapa JSON
-godot-server/  Servidor multiplayer dedicado via ENet
-```
-
-Scripts locais:
+O Client e o Studio principais agora ficam em `native/`:
 
 ```text
-powershell -ExecutionPolicy Bypass -File tools/build-godot-projects.ps1
-powershell -ExecutionPolicy Bypass -File tools/run-godot-server.ps1
-powershell -ExecutionPolicy Bypass -File tools/run-godot-client.ps1 1 http://localhost:3000
-powershell -ExecutionPolicy Bypass -File tools/run-godot-studio.ps1 http://localhost:3000
-powershell -ExecutionPolicy Bypass -File tools/install-godot-export-templates.ps1
-powershell -ExecutionPolicy Bypass -File tools/export-godot-windows.ps1
-powershell -ExecutionPolicy Bypass -File tools/fast-client-download.ps1
-powershell -ExecutionPolicy Bypass -File tools/export-godot-server-linux.ps1
-powershell -ExecutionPolicy Bypass -File tools/export-godot-android.ps1
+native/engine/  Biblioteca comum: DataModel, JSON, HTTP WinHTTP, renderer D3D9
+native/client/  Player Windows x64, aberto por novus://
+native/studio/  Studio Windows x64, aberto por novus-studio://
 ```
 
-Observacao: o Godot instalado e x64, entao os scripts definem `DOTNET_ROOT` para `%USERPROFILE%\.dotnet9-x64`, onde fica o SDK .NET 9 x64 local usado pelo Godot 4.6.2.
+Instale o toolchain uma vez:
+
+```text
+npm run native:toolchain
+```
+
+Build e empacotamento:
+
+```text
+npm run native:build
+npm run native:client
+npm run native:studio
+npm run native:package
+```
+
+O CMake preset oficial e:
+
+```text
+cmake --preset windows-msvc
+cmake --build --preset windows-release
+```
 
 ### Modelo R6 do client
 
-O client tenta carregar o R6 nesta ordem:
+O primeiro corte nativo ja renderiza um R6 classico por partes no renderer D3D9. O proximo passo da engine e carregar OBJ/GLTF externo para usar o R6 customizado do projeto e hats GLTF do catalogo sem fallback.
 
-```text
-<pasta do NovusWorldsClient.exe>/assets/r6/r6.gltf
-<pasta do NovusWorldsClient.exe>/r6.gltf
-%APPDATA%/Godot/app_userdata/Novus Worlds Client/r6.gltf
-res://assets/r6/r6.gltf
-```
-
-No repositorio, o arquivo usado para gerar o download fica em `godot-client/assets/r6/r6.gltf`. O pacote rapido tambem copia essa pasta como asset externo, entao trocar `godot-client/assets/r6/r6.gltf` e rodar `tools/fast-client-download.ps1` ja atualiza o ZIP. Para animacao por partes, o GLTF precisa ter seis meshes/nodes de R6 ou nomes reconheciveis como Head, Torso, LeftArm, RightArm, LeftLeg e RightLeg. Se nao tiver isso, o client carrega o GLTF inteiro como modelo, mas nao consegue aplicar animacoes R6 por membro.
-
-Para atualizar o download do client mais rapido depois de mudancas so em C#, rode `tools/NovusFastClientPackager.exe` ou `tools/fast-client-download.ps1`. Isso recompila o DLL do client e recria `public/download/NovusWorldsClient-Windows.zip` usando o ultimo export ja existente. Se voce mudou cenas, assets novos, texturas novas ou arquivos embutidos no pack da Godot, rode `tools/export-godot-windows.ps1` uma vez.
-
-### Android
-
-O client tambem foi preparado para Android com preset `Android` em `godot-client/export_presets.cfg` e controles touch. A exportacao precisa de Android SDK/JDK/NDK/CMake configurados no Godot. O Godot 4.6.2 .NET ainda marcou Android/C# como experimental e bloqueou o APK neste ambiente; veja `tools/export-godot-android.md`.
-
-Os endpoints `/api/legacy/place/:id` e `/api/legacy/studio-project` continuam existindo como API de tickets e mapas JSON para os apps Godot.
+Os endpoints `/api/legacy/place/:id` e `/api/legacy/studio-project` continuam existindo como API de tickets e mapas JSON para os apps nativos.
 
 ## Aviso importante sobre Render gratuito
 

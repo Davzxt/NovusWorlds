@@ -13,11 +13,11 @@ function baseUrl(req) {
 }
 
 function gameServerHost(req) {
-  return process.env.NOVUS_GODOT_HOST || req.hostname || '127.0.0.1';
+  return process.env.NOVUS_REALTIME_HOST || process.env.NOVUS_GODOT_HOST || req.hostname || '127.0.0.1';
 }
 
 function gameServerPort() {
-  return Number(process.env.NOVUS_GODOT_PORT || 53640);
+  return Number(process.env.NOVUS_REALTIME_PORT || process.env.NOVUS_GODOT_PORT || 53640);
 }
 
 function parseJson(value, fallback = {}) {

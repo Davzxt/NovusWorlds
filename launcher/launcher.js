@@ -38,8 +38,8 @@ async function joinGame() {
   const ticket = need('ticket');
   const baseUrl = normalizeBaseUrl(need('baseUrl'));
   const gameId = need('gameId');
-  const serverHost = uri.searchParams.get('server') || config.godotServerHost || '127.0.0.1';
-  const serverPort = uri.searchParams.get('port') || config.godotServerPort || 53640;
+  const serverHost = uri.searchParams.get('server') || config.realtimeHost || config.godotServerHost || '127.0.0.1';
+  const serverPort = uri.searchParams.get('port') || config.realtimePort || config.godotServerPort || 53640;
   const target = resolveExecutable(config.playerExe, 'player');
   const joinData = await json(`${baseUrl}/api/legacy/tickets/${encodeURIComponent(ticket)}`);
   const joinPath = write(`join-${gameId}.json`, JSON.stringify(joinData, null, 2));
@@ -51,7 +51,7 @@ async function joinGame() {
     serverPort,
     joinJson: joinPath
   });
-  console.log(`Downloaded Godot join ticket:\n${joinPath}`);
+  console.log(`Downloaded Novus join ticket:\n${joinPath}`);
   launch(target, args, 'player');
 }
 
