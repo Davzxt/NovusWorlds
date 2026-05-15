@@ -5,8 +5,8 @@ Ponte local para abrir o Novus Worlds Client e o Novus Worlds Studio pelo site.
 ## Uso facil
 
 1. Abra `/download.html` no site.
-2. Baixe `Install-NovusWorlds.cmd`.
-3. Execute o arquivo.
+2. Baixe `NovusLauncherSetup.exe`.
+3. Rode o assistente grafico e confirme a instalacao.
 4. O instalador baixa Client e Studio nativos, instala em `%LOCALAPPDATA%\NovusWorlds`, registra `novus://` e `novus-studio://`, e cria atalhos na area de trabalho.
 
 Depois disso, clique em `Jogar` na pagina de um jogo. O site cria um ticket temporario e o Windows abre o Client automaticamente.
@@ -18,4 +18,4 @@ Depois disso, clique em `Jogar` na pagina de um jogo. O site cria um ticket temp
 
 ## Multiplayer
 
-O Player nativo usa o ticket para baixar mapa/avatar pelo site e, nas proximas etapas, usar o WebSocket do proprio Express para multiplayer pequeno no Render.
+O launcher instalado usa PowerShell nativo do Windows, nao exige Node.js, baixa o ticket do site e inicia o executavel correto.

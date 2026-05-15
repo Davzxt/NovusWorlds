@@ -69,14 +69,14 @@ function Find-ExeInFolder($folder, $name) {
   return ""
 }
 
-function Register-Protocol($scheme, $description, $nodePath, $launcherPath) {
+function Register-Protocol($scheme, $description, $protocolLauncherPath) {
   $base = "HKCU:\Software\Classes\$scheme"
   New-Item -Path $base -Force | Out-Null
   New-ItemProperty -Path $base -Name "(default)" -Value "URL:$description" -Force | Out-Null
   New-ItemProperty -Path $base -Name "URL Protocol" -Value "" -Force | Out-Null
   New-Item -Path "$base\shell\open\command" -Force | Out-Null
-  $hidden = Join-Path (Split-Path $launcherPath) "launch-hidden.vbs"
-  $command = 'wscript.exe "' + $hidden + '" "%1"'
+  $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+  $command = '"' + $powershell + '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $protocolLauncherPath + '" "%1"'
   New-ItemProperty -Path "$base\shell\open\command" -Name "(default)" -Value $command -Force | Out-Null
 }
 
@@ -119,7 +119,7 @@ function Add-Button($form, $text, $x, $y, $w, $h) {
 }
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Novus Worlds Launcher Setup"
+$form.Text = "Novus Worlds Setup Wizard"
 $form.Size = New-Object System.Drawing.Size(680, 520)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
@@ -127,10 +127,12 @@ $form.MaximizeBox = $false
 $form.BackColor = [System.Drawing.Color]::FromArgb(235, 245, 255)
 $form.Font = New-Object System.Drawing.Font("Verdana", 9)
 
-$title = Add-Label $form "Novus Worlds Launcher" 24 18 620 30
+$stepLabel = Add-Label $form "Etapa 1 de 3" 26 6 180 18
+$stepLabel.ForeColor = [System.Drawing.Color]::FromArgb(90, 100, 115)
+$title = Add-Label $form "Novus Worlds Setup Wizard" 24 24 620 30
 $title.Font = New-Object System.Drawing.Font("Verdana", 16, [System.Drawing.FontStyle]::Bold)
 $title.ForeColor = [System.Drawing.Color]::FromArgb(20, 80, 150)
-Add-Label $form "Configure a ponte local para abrir jogos e Studio pelo Novus Client nativo. O instalador baixa e atualiza o Client/Studio automaticamente." 26 54 610 38 | Out-Null
+Add-Label $form "Este assistente instala o Client, o Studio, o launcher local, os protocolos novus:// e novus-studio:// e cria atalhos na area de trabalho." 26 60 610 40 | Out-Null
 
 Add-Label $form "Pasta de instalacao" 26 108 200 20 | Out-Null
 $installBox = Add-TextBox $form $defaultInstallDir 26 130 500
@@ -149,7 +151,7 @@ $studioBox = Add-TextBox $form $defaultStudioDir 26 254 500
 $studioBrowse = Add-Button $form "Procurar" 535 252 105 28
 
 $openDownloads = Add-Button $form "Abrir downloads" 26 300 190 32
-$install = Add-Button $form "Instalar Novus Launcher" 230 300 210 32
+$install = Add-Button $form "Instalar agora" 230 300 210 32
 $close = Add-Button $form "Fechar" 455 300 90 32
 
 $status = New-Object System.Windows.Forms.TextBox
@@ -182,9 +184,19 @@ $studioBrowse.Add_Click({ Pick-Exe "Escolha NovusWorldsStudio.exe" $studioBox })
 $openDownloads.Add_Click({ Start-Process "https://github.com/Davzxt/NovusWorlds/raw/main/public/download/NovusWorldsClient-Windows.zip" })
 $close.Add_Click({ $form.Close() })
 
+$form.Add_Shown({
+  $answer = [System.Windows.Forms.MessageBox]::Show("Deseja instalar o Novus Worlds Client e Studio agora?", "Novus Worlds Setup", "YesNo", "Question")
+  if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) {
+    $form.Close()
+    return
+  }
+  Log "Assistente iniciado. Clique em Instalar agora para baixar e configurar tudo automaticamente."
+})
+
 $install.Add_Click({
   try {
     $install.Enabled = $false
+    $stepLabel.Text = "Etapa 2 de 3"
     $installDir = $installBox.Text.Trim()
     if (-not $installDir) { throw "Escolha uma pasta de instalacao." }
     New-Item -ItemType Directory -Force -Path $installDir | Out-Null
@@ -218,16 +230,8 @@ $install.Add_Click({
       Log "Studio instalado: $studioExe"
     }
 
-    $nodePath = Find-Node
-    if (-not $nodePath) {
-      Log "Node.js nao encontrado. Abrindo pagina de download."
-      Start-Process "https://nodejs.org/en/download"
-      throw "Instale o Node.js LTS e rode o instalador novamente."
-    }
-    Log "Node encontrado: $nodePath"
-
     $launcherPath = Download-File "launcher.js" $installDir
-    Download-File "launch-hidden.ps1" $installDir | Out-Null
+    $protocolLauncherPath = Download-File "launch-hidden.ps1" $installDir
     Download-File "launch-hidden.vbs" $installDir | Out-Null
     Download-File "config.example.json" $installDir | Out-Null
     Download-File "README.md" $installDir | Out-Null
@@ -247,15 +251,18 @@ $install.Add_Click({
     $config | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
     Log "Config salvo: $configPath"
 
-    Register-Protocol "novus" "Novus Worlds Player" $nodePath $launcherPath
-    Register-Protocol "novus-studio" "Novus Worlds Studio" $nodePath $launcherPath
+    $stepLabel.Text = "Etapa 3 de 3"
+    Register-Protocol "novus" "Novus Worlds Player" $protocolLauncherPath
+    Register-Protocol "novus-studio" "Novus Worlds Studio" $protocolLauncherPath
     Log "Protocolos registrados."
 
-    Create-Shortcut "Novus Worlds Player.lnk" $nodePath ('"' + $launcherPath + '"') $installDir
+    $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+    Create-Shortcut "Novus Worlds Launcher.lnk" $powershell ('-NoProfile -ExecutionPolicy Bypass -File "' + $protocolLauncherPath + '"') $installDir
     Create-Shortcut "Novus Worlds Studio.lnk" $studioBox.Text.Trim() "" (Split-Path $studioBox.Text.Trim())
     Create-Shortcut "Novus Worlds Client.lnk" $playerBox.Text.Trim() "" (Split-Path $playerBox.Text.Trim())
     Log "Atalhos criados na area de trabalho."
     Log "Concluido. Abra um jogo pelo site para iniciar o Player com ticket."
+    $stepLabel.Text = "Concluido"
     [System.Windows.Forms.MessageBox]::Show("Novus Launcher instalado com sucesso.", "Novus Worlds", "OK", "Information") | Out-Null
   } catch {
     Log "Erro: $($_.Exception.Message)"

@@ -1,6 +1,7 @@
 #include "Novus/Application.h"
 
 #include <chrono>
+#include <exception>
 #include <fstream>
 #include <shellapi.h>
 #include <sstream>
@@ -94,7 +95,22 @@ int ClassicApp::Run(HINSTANCE instance, int showCommand) {
   ShowWindow(hwnd_, showCommand);
   UpdateWindow(hwnd_);
 
-  if (!renderer_.Initialize(hwnd_) || !OnCreate()) return 1;
+  if (!renderer_.Initialize(hwnd_)) {
+    MessageBoxW(hwnd_, L"Nao foi possivel iniciar o Direct3D9. Atualize o Windows/driver de video e tente novamente.", title_.c_str(), MB_OK | MB_ICONERROR);
+    return 1;
+  }
+  try {
+    if (!OnCreate()) {
+      MessageBoxW(hwnd_, L"O aplicativo nao conseguiu iniciar.", title_.c_str(), MB_OK | MB_ICONERROR);
+      return 1;
+    }
+  } catch (const std::exception& err) {
+    MessageBoxW(hwnd_, ToWide(err.what()).c_str(), title_.c_str(), MB_OK | MB_ICONERROR);
+    return 1;
+  } catch (...) {
+    MessageBoxW(hwnd_, L"Erro desconhecido ao iniciar o aplicativo.", title_.c_str(), MB_OK | MB_ICONERROR);
+    return 1;
+  }
 
   MSG msg{};
   auto previous = std::chrono::steady_clock::now();

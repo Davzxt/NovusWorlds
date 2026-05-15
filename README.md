@@ -54,13 +54,13 @@ Como o estado das salas fica em memoria, nao use varias instancias Render free a
 O fluxo automatico usa ticket temporario:
 
 1. Baixe e extraia `NovusWorldsClient-Windows.zip`.
-2. Baixe e rode `NovusLauncherSetup.ps1`.
+2. Baixe e rode `NovusLauncherSetup.exe`.
 3. No instalador, selecione `NovusWorldsClient.exe` e `NovusWorldsStudio.exe`.
 4. O instalador registra `novus://` e `novus-studio://` no Windows.
 5. No site, abra um jogo e clique em `Jogar`.
 6. O site cria um ticket em `/api/legacy/tickets` e abre o client com `gameId`, `baseUrl`, `serverHost`, `serverPort` e `ticket`.
 
-Modo facil: baixe `Install-NovusWorlds.cmd` em `/download.html`. Ele baixa o launcher, abre o instalador com PowerShell liberado, instala Client e Studio automaticamente em `%LOCALAPPDATA%\NovusWorlds`, registra os protocolos e cria atalhos na area de trabalho.
+Modo facil: baixe `NovusLauncherSetup.exe` em `/download.html`. Ele abre um assistente grafico, pergunta se deseja instalar, instala Client e Studio automaticamente em `%LOCALAPPDATA%\NovusWorlds`, registra os protocolos e cria atalhos na area de trabalho. O launcher de protocolo nao exige Node.js.
 
 Variaveis opcionais para o ticket do client nativo:
 
